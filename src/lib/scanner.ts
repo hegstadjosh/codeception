@@ -194,6 +194,18 @@ function countMessages(jsonlPath: string): number {
 
 // ---- Status determination ----
 
+/**
+ * Status detection — CPU-primary approach.
+ *
+ * CPU is the most reliable signal for what Claude is actually doing:
+ * - CPU > 2%  → Claude is generating text/thinking = ACTIVE
+ * - CPU ~0%, last meaningful msg is assistant text → waiting for human = WAITING
+ * - CPU ~0%, last msg is tool_use → tool is running (subprocess) = ACTIVE
+ * - CPU ~0%, no recent activity → IDLE or STALE
+ *
+ * The JSONL "last message" approach alone is unreliable because system/progress
+ * messages pollute the tail, and tool execution looks like inactivity.
+ */
 function determineStatus(
   isAlive: boolean,
   messages: ConversationMessage[],
@@ -203,27 +215,52 @@ function determineStatus(
     return messages.length > 0 ? "completed" : "dead";
   }
 
-  if (messages.length === 0) return "idle";
+  const cpu = processInfo?.cpu ?? 0;
 
-  const lastMsg = messages[messages.length - 1];
-  const lastTime = new Date(lastMsg.timestamp).getTime();
-  const elapsed = Date.now() - lastTime;
-
-  // Stale: no activity for 5+ minutes
-  if (elapsed > 5 * 60 * 1000) return "stale";
-
-  // Active: recent progress/tool activity
-  if (lastMsg.type === "progress" || elapsed < 30000) {
-    if (processInfo && processInfo.cpu > 1) return "active";
+  // Find the last *meaningful* message (skip system, progress, queue-operation, file-history-snapshot)
+  let lastMeaningful: ConversationMessage | null = null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const t = messages[i].type;
+    if (t === "user" || t === "assistant") {
+      lastMeaningful = messages[i];
+      break;
+    }
   }
 
-  // Waiting: last message from assistant (agent is done, needs human input)
-  if (lastMsg.type === "assistant" || lastMsg.message?.role === "assistant") {
+  const lastTime = lastMeaningful
+    ? new Date(lastMeaningful.timestamp).getTime()
+    : 0;
+  const elapsed = lastTime ? Date.now() - lastTime : Infinity;
+
+  // Active: CPU indicates Claude is working right now
+  if (cpu > 2) return "active";
+
+  // If we have no meaningful messages, it's idle
+  if (!lastMeaningful) return "idle";
+
+  // Stale: no meaningful activity for 5+ minutes
+  if (elapsed > 5 * 60 * 1000) return "stale";
+
+  // Check what the last meaningful message was
+  const lastRole = lastMeaningful.message?.role;
+  const lastContent = lastMeaningful.message?.content;
+
+  // If last meaningful message is assistant with tool_use → tool is running, still active
+  if (lastRole === "assistant" && Array.isArray(lastContent)) {
+    const hasToolUse = lastContent.some(
+      (c: Record<string, unknown>) => c.type === "tool_use"
+    );
+    if (hasToolUse && elapsed < 120000) return "active";
+  }
+
+  // If last meaningful message is assistant text → Claude finished, waiting for human
+  if (lastRole === "assistant" && elapsed > 3000) {
     return "waiting";
   }
 
-  // Active by default if alive and recent
-  if (elapsed < 60000) return "active";
+  // If last meaningful message is from user → Claude should be responding
+  // (but CPU is low, so maybe between API calls or just starting)
+  if (lastRole === "user" && elapsed < 60000) return "active";
 
   return "idle";
 }
