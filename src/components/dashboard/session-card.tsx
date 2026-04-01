@@ -29,9 +29,11 @@ function relativeTime(epochMs: number): string {
 
 interface SessionCardProps {
   session: Session;
+  isPinned?: boolean;
+  onTogglePin?: (id: string) => void;
 }
 
-export function SessionCard({ session }: SessionCardProps) {
+export function SessionCard({ session, isPinned = false, onTogglePin }: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
 
@@ -62,7 +64,8 @@ export function SessionCard({ session }: SessionCardProps) {
       size="sm"
       className={cn(
         "bg-zinc-900/60 ring-zinc-800/80 transition-colors hover:ring-zinc-700/80 cursor-pointer",
-        expanded && "ring-zinc-600/60"
+        expanded && "ring-zinc-600/60",
+        isPinned && "border-l-2 border-l-amber-500/60"
       )}
     >
       {/* Header row */}
@@ -85,6 +88,23 @@ export function SessionCard({ session }: SessionCardProps) {
           )}
         </div>
         <CardAction>
+          {onTogglePin && (
+            <button
+              className={cn(
+                "text-sm leading-none transition-colors",
+                isPinned
+                  ? "text-amber-400 hover:text-amber-300"
+                  : "text-zinc-500 hover:text-zinc-300"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePin(session.id);
+              }}
+              title={isPinned ? "Unpin session" : "Pin session"}
+            >
+              {isPinned ? "\u2605" : "\u2606"}
+            </button>
+          )}
           <span className="font-mono text-[11px] text-zinc-500">
             {relativeTime(session.lastActivityAt)}
           </span>
