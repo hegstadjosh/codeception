@@ -133,7 +133,13 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
     <Card
       size="sm"
       className={cn(
-        "bg-zinc-900/60 ring-zinc-800/80 transition-colors hover:ring-zinc-700/80",
+        "transition-colors hover:ring-zinc-700/80",
+        // Managed + alive: full color with green left accent
+        isManaged && isAlive && "bg-zinc-900/60 ring-zinc-800/80 border-l-2 border-l-emerald-500/50",
+        // Unmanaged + alive: muted/cooler background
+        !isManaged && isAlive && "bg-zinc-900/40 ring-zinc-800/60 opacity-90",
+        // Dead sessions: most muted
+        !isAlive && "bg-zinc-950/60 ring-zinc-800/50 opacity-75",
         expanded && "ring-zinc-600/60",
         isPinned && "border-l-2 border-l-amber-500/60"
       )}
@@ -157,6 +163,11 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             <span className="text-[11px] text-zinc-500">{session.relative_dir}</span>
           )}
           <StatusBadge status={session.status} managed={isManaged} />
+          {!isManaged && isAlive && (
+            <span className="text-[11px] text-zinc-500" title="Running in a regular terminal, not managed via tmux">
+              &#x1f441;
+            </span>
+          )}
           {session.branch && (
             <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
               {session.branch}

@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { Session, SessionStatus } from "./types";
+import type { Session, SessionStatus, DashboardSettings } from "./types";
 
-export function useNotifications(sessions: Session[]) {
+export function useNotifications(sessions: Session[], settings: DashboardSettings) {
   const prevStatuses = useRef<Map<string, SessionStatus>>(new Map());
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Request notification permission on mount
   useEffect(() => {
     if (
+      settings.notificationBrowser &&
       typeof window !== "undefined" &&
       "Notification" in window &&
       Notification.permission === "default"
     ) {
       Notification.requestPermission();
     }
-  }, []);
+  }, [settings.notificationBrowser]);
 
   // Compare statuses and fire notifications
   useEffect(() => {
@@ -31,6 +32,7 @@ export function useNotifications(sessions: Session[]) {
       ) {
         // Fire browser notification
         if (
+          settings.notificationBrowser &&
           typeof window !== "undefined" &&
           "Notification" in window &&
           Notification.permission === "granted"
@@ -42,23 +44,25 @@ export function useNotifications(sessions: Session[]) {
         }
 
         // Play beep via AudioContext
-        try {
-          if (!audioCtxRef.current && typeof AudioContext !== "undefined") {
-            audioCtxRef.current = new AudioContext();
+        if (settings.notificationSound) {
+          try {
+            if (!audioCtxRef.current && typeof AudioContext !== "undefined") {
+              audioCtxRef.current = new AudioContext();
+            }
+            const ctx = audioCtxRef.current;
+            if (ctx) {
+              const oscillator = ctx.createOscillator();
+              const gain = ctx.createGain();
+              oscillator.connect(gain);
+              gain.connect(ctx.destination);
+              oscillator.frequency.value = 440;
+              gain.gain.value = 0.1;
+              oscillator.start();
+              oscillator.stop(ctx.currentTime + 0.15);
+            }
+          } catch {
+            // AudioContext may require user gesture or be unavailable
           }
-          const ctx = audioCtxRef.current;
-          if (ctx) {
-            const oscillator = ctx.createOscillator();
-            const gain = ctx.createGain();
-            oscillator.connect(gain);
-            gain.connect(ctx.destination);
-            oscillator.frequency.value = 440;
-            gain.gain.value = 0.1;
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.15);
-          }
-        } catch {
-          // AudioContext may require user gesture or be unavailable
         }
       }
     }
@@ -78,5 +82,5 @@ export function useNotifications(sessions: Session[]) {
           ? `(${inputCount} needs input) Claude Manager`
           : "Claude Manager";
     }
-  }, [sessions]);
+  }, [sessions, settings.notificationBrowser, settings.notificationSound]);
 }

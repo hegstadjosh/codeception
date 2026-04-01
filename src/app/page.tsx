@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const [settings, updateSettings] = useSettings();
   const fetchCountRef = useRef(0);
 
-  useNotifications(sessions);
+  useNotifications(sessions, settings);
 
   const togglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {

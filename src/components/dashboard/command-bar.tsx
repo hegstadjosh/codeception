@@ -36,8 +36,12 @@ export function CommandBar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ command: text }),
       });
-      const data = await res.json();
-      setResponse(data.response ?? data.error ?? "No response");
+      if (res.status === 404) {
+        setResponse("Command endpoint not configured. The manager API is not running.");
+      } else {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        setResponse(data.response ?? data.error ?? "No response");
+      }
       setInput("");
     } catch (err) {
       setResponse(

@@ -471,8 +471,17 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
         )}
       </div>
 
-      {/* Reply input at the bottom of conversation */}
-      <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} />
+      {/* Reply input — only shown for managed + alive sessions */}
+      {managed && isAlive && (
+        <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} />
+      )}
+      {!managed && isAlive && (
+        <div className="border-t border-zinc-800/50 px-3 py-2">
+          <p className="text-[11px] text-zinc-600 italic">
+            View only — this session is running in a regular terminal. Resume via tmux to enable replies.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
