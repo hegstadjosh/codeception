@@ -48,20 +48,27 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
   const isManaged = session.managed !== false;
   const isAlive = session.status === "working" || session.status === "input" || session.status === "new";
 
-  // One smart "Open" button — knows whether to focus or resume
+  // One smart "Open" button — knows whether to focus, resume, or upgrade
   const handleOpen = useCallback(async () => {
     setOpenState("loading");
     setOpenError("");
     try {
-      if (isAlive) {
-        // Session is running — focus its terminal
+      if (isAlive && isManaged) {
+        // Managed + alive — just focus it
+        const res = await fetch(`/api/sessions/${session.session_id}/focus`, { method: "POST" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Focus failed" }));
+          throw new Error(data.error || `Focus failed (${res.status})`);
+        }
+      } else if (isAlive && !isManaged) {
+        // Unmanaged + alive — just bring Terminal to front, don't kill anything
         const res = await fetch(`/api/sessions/${session.session_id}/focus`, { method: "POST" });
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: "Focus failed" }));
           throw new Error(data.error || `Focus failed (${res.status})`);
         }
       } else {
-        // Session is dead — resume in a new terminal
+        // Dead — resume in tmux
         const res = await fetch(`/api/sessions/${session.session_id}/resume`, { method: "POST" });
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: "Resume failed" }));
@@ -74,7 +81,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
       setOpenState("error");
       setOpenError(e instanceof Error ? e.message : "Failed");
     }
-  }, [isAlive, session.session_id]);
+  }, [isAlive, isManaged, session.session_id]);
 
   const handleKill = useCallback(async () => {
     if (!confirmKill) {
@@ -100,20 +107,27 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
     setConfirmKill(false);
   }, [confirmKill, session.session_id]);
 
-  // Open button label + tooltip
-  const openLabel = openState === "loading"
-    ? "Opening..."
-    : openState === "success"
-      ? "Opened"
-      : isAlive
-        ? "Switch to Terminal"
-        : "Resume in Terminal";
+  // Open button label + tooltip — different for managed vs unmanaged
+  let openLabel: string;
+  let openTooltip: string;
 
-  const openTooltip = isAlive
-    ? isManaged
-      ? "Open the terminal window for this session"
-      : "Bring Terminal.app to front (session is in a regular terminal)"
-    : "Resume this session in a new terminal window";
+  if (openState === "loading") {
+    openLabel = "Opening...";
+    openTooltip = "";
+  } else if (openState === "success") {
+    openLabel = "Opened";
+    openTooltip = "";
+  } else if (!isAlive) {
+    openLabel = "Resume in Terminal";
+    openTooltip = "Resume this session in a new tmux terminal (full control: reply, status detection)";
+  } else if (isManaged) {
+    openLabel = "Switch to Terminal";
+    openTooltip = "Open the terminal window for this session";
+  } else {
+    // Alive but unmanaged — explain, don't auto-kill
+    openLabel = "Running in Terminal";
+    openTooltip = "This session is in a regular terminal — limited features. Close it there and click Resume here to get full control (reply, status detection).";
+  }
 
   return (
     <Card
