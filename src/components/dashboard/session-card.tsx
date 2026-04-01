@@ -72,8 +72,11 @@ export function SessionCard({ session }: SessionCardProps) {
       >
         <div className="flex items-center gap-2 min-w-0">
           <CardTitle className="truncate text-sm font-semibold text-zinc-100">
-            {session.projectName}
+            {session.displayName || session.projectName}
           </CardTitle>
+          {session.displayName && (
+            <span className="text-[11px] text-zinc-500">{session.projectName}</span>
+          )}
           <StatusBadge status={session.status} />
           {session.gitBranch && (
             <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">

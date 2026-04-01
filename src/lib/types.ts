@@ -28,7 +28,7 @@ export interface ConversationMessage {
   type: "user" | "assistant" | "progress" | "tool_result";
   message?: {
     role: "user" | "assistant";
-    content: MessageContent[];
+    content: MessageContent[] | string;
   };
   timestamp: string; // ISO 8601
   cwd?: string;
@@ -45,8 +45,10 @@ export interface ConversationMessage {
 
 export type MessageContent =
   | { type: "text"; text: string }
+  | { type: "thinking"; thinking: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+  | { type: "tool_result"; tool_use_id: string; content: string | unknown[]; is_error?: boolean }
+  | { type: "tool_reference"; tool_name: string };
 
 /** Enriched session object for the dashboard */
 export interface Session {

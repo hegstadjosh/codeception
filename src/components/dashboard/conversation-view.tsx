@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { ConversationMessage, MessageContent } from "@/lib/types";
+import type { ConversationMessage } from "@/lib/types";
 
 interface ConversationViewProps {
   sessionId: string;
@@ -20,30 +20,64 @@ function formatTime(iso: string): string {
   });
 }
 
-function renderContent(content: MessageContent[]) {
-  return content.map((block, i) => {
-    if (block.type === "text") {
+/**
+ * Render message content — handles all real shapes from Claude Code JSONL:
+ * - string (user typed text)
+ * - array of blocks: text, thinking, tool_use, tool_result, tool_reference
+ */
+function renderContent(content: unknown) {
+  if (typeof content === "string") {
+    return <span className="whitespace-pre-wrap">{content}</span>;
+  }
+  if (!Array.isArray(content)) return null;
+
+  return content.map((block: Record<string, unknown>, i: number) => {
+    if (!block || typeof block !== "object") return null;
+    const type = block.type as string;
+
+    if (type === "text") {
       return (
         <span key={i} className="whitespace-pre-wrap">
-          {block.text}
+          {block.text as string}
         </span>
       );
     }
-    if (block.type === "tool_use") {
+
+    if (type === "thinking") {
+      const text = block.thinking as string;
+      return (
+        <details key={i} className="mt-1">
+          <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-400">
+            thinking...
+          </summary>
+          <div className="mt-1 rounded border border-zinc-800 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-500 max-h-32 overflow-y-auto">
+            {text.length > 500 ? text.slice(0, 500) + "..." : text}
+          </div>
+        </details>
+      );
+    }
+
+    if (type === "tool_use") {
       return (
         <Badge
           key={i}
           variant="secondary"
           className="bg-zinc-800 text-zinc-300 text-[11px] font-mono"
         >
-          {block.name}
+          {block.name as string}
         </Badge>
       );
     }
-    if (block.type === "tool_result") {
-      const text = block.content;
-      const truncated =
-        text.length > 200 ? text.slice(0, 200) + "..." : text;
+
+    if (type === "tool_result") {
+      const raw = block.content;
+      const text =
+        typeof raw === "string"
+          ? raw
+          : Array.isArray(raw)
+            ? raw.map((r: Record<string, unknown>) => r.tool_name ?? r.text ?? JSON.stringify(r)).join(", ")
+            : JSON.stringify(raw);
+      const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
       return (
         <div
           key={i}
@@ -58,6 +92,20 @@ function renderContent(content: MessageContent[]) {
         </div>
       );
     }
+
+    if (type === "tool_reference") {
+      return (
+        <Badge
+          key={i}
+          variant="outline"
+          className="text-[11px] font-mono text-zinc-500"
+        >
+          {block.tool_name as string}
+        </Badge>
+      );
+    }
+
+    // Unknown block type — skip silently
     return null;
   });
 }
@@ -122,14 +170,18 @@ export function ConversationView({ sessionId }: ConversationViewProps) {
     );
   }
 
+  // Filter to only user/assistant messages with content
+  const displayMessages = messages.filter(
+    (msg) =>
+      (msg.type === "user" || msg.type === "assistant") &&
+      msg.message?.content != null
+  );
+
   return (
     <ScrollArea className="h-[400px]">
       <div className="space-y-1 p-3">
-        {messages.map((msg) => {
-          const role = msg.message?.role;
-          if (!role || !msg.message?.content) return null;
-
-          const isUser = role === "user";
+        {displayMessages.map((msg) => {
+          const isUser = msg.message!.role === "user";
 
           return (
             <div key={msg.uuid} className="group flex gap-2 py-1.5">
@@ -145,7 +197,7 @@ export function ConversationView({ sessionId }: ConversationViewProps) {
                 {isUser ? "You" : "Claude"}
               </span>
               <div className="min-w-0 flex-1 text-sm text-zinc-200 leading-relaxed">
-                {renderContent(msg.message.content)}
+                {renderContent(msg.message!.content)}
               </div>
             </div>
           );

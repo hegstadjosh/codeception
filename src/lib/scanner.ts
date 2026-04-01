@@ -241,14 +241,30 @@ function extractProjectName(cwd: string): string {
   return parts[parts.length - 1] || "unknown";
 }
 
+/** Extract display name from custom-title message */
+function getDisplayName(messages: ConversationMessage[]): string | null {
+  for (const msg of messages) {
+    if ((msg as Record<string, unknown>).type === "custom-title") {
+      return ((msg as Record<string, unknown>).customTitle as string) ?? null;
+    }
+  }
+  return null;
+}
+
 /** Extract the last user prompt text from messages */
 function getLastUserPrompt(messages: ConversationMessage[]): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (msg.type === "user" && msg.message?.content) {
-      for (const part of msg.message.content) {
+      const content = msg.message.content;
+      if (typeof content === "string") {
+        if (!content.startsWith("[")) return content.slice(0, 200);
+        continue;
+      }
+      if (!Array.isArray(content)) continue;
+      for (const part of content) {
         if (part.type === "text" && part.text && !part.text.startsWith("[")) {
-          return part.text.slice(0, 200); // truncate for display
+          return part.text.slice(0, 200);
         }
       }
     }
@@ -282,7 +298,7 @@ export async function scanSessions(): Promise<Session[]> {
       projectName: extractProjectName(sf.cwd),
       gitBranch: lastMsg?.gitBranch ?? null,
       slug: lastMsg?.slug ?? null,
-      displayName: null, // TODO: read from -n flag if available
+      displayName: getDisplayName(messages),
       startedAt: sf.startedAt,
       lastActivityAt: lastMsg
         ? new Date(lastMsg.timestamp).getTime()
@@ -354,8 +370,11 @@ export function extractMessageText(msg: ConversationMessage): string {
     }
     return "";
   }
+  const content = msg.message.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
   const parts: string[] = [];
-  for (const c of msg.message.content) {
+  for (const c of content) {
     if (c.type === "text") parts.push(c.text);
     else if (c.type === "tool_use") parts.push(`[tool: ${c.name}]`);
     else if (c.type === "tool_result") {
