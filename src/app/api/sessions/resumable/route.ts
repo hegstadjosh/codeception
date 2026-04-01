@@ -1,14 +1,8 @@
 const RECON = "http://localhost:3100";
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export async function GET() {
   try {
-    const res = await fetch(`${RECON}/api/sessions/${id}/kill`, {
-      method: "POST",
-    });
+    const res = await fetch(`${RECON}/api/sessions/resumable`);
     const data = await res.json();
     return Response.json(data, { status: res.status });
   } catch {

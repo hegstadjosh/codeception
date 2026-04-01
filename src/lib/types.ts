@@ -1,144 +1,57 @@
 // ============================================================
-// Claude Manager — Core Types
+// Claude Manager — Core Types (backed by recon serve)
 // ============================================================
 
-/** Status state machine for a Claude Code session */
-export type SessionStatus =
-  | "active" // PID alive, recent tool/progress activity
-  | "waiting" // PID alive, last message from assistant, no tool activity
-  | "idle" // PID alive, no recent activity
-  | "stale" // PID alive, no activity > 5min
-  | "dead" // PID not found in process table
-  | "completed"; // JSONL exists but no matching PID
+/** Status state machine from recon */
+export type SessionStatus = "working" | "input" | "idle" | "new";
 
-/** Raw session metadata from ~/.claude/sessions/*.json */
-export interface SessionFile {
-  pid: number;
-  sessionId: string;
-  cwd: string;
-  startedAt: number; // epoch ms
-  kind: string; // "interactive" | "print" etc
-  entrypoint: string; // "cli" | "sdk" etc
-}
-
-/** A single message from a conversation JSONL file */
+/** A single message from recon */
 export interface ConversationMessage {
-  uuid: string;
-  parentUuid?: string;
-  type: "user" | "assistant" | "progress" | "tool_result";
-  message?: {
-    role: "user" | "assistant";
-    content: MessageContent[] | string;
-  };
-  timestamp: string; // ISO 8601
-  cwd?: string;
-  sessionId: string;
-  gitBranch?: string;
-  slug?: string;
-  version?: string;
-  entrypoint?: string;
-  // Tool-related fields
-  toolUseID?: string;
-  toolUseResult?: string;
-  data?: Record<string, unknown>;
+  timestamp: string;
+  kind: "user_text" | "assistant_text" | "tool_call" | "tool_result" | "thinking";
+  text: string;
+  tool_name: string | null;
 }
 
-export type MessageContent =
-  | { type: "text"; text: string }
-  | { type: "thinking"; thinking: string }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string | unknown[]; is_error?: boolean }
-  | { type: "tool_reference"; tool_name: string };
-
-/** Enriched session object for the dashboard */
+/** Session object from recon serve GET /api/sessions */
 export interface Session {
-  id: string; // sessionId (UUID)
-  pid: number;
+  session_id: string;
+  project_name: string;
+  branch: string | null;
   cwd: string;
-  projectName: string; // extracted from cwd (last meaningful dir segment)
-  gitBranch: string | null;
-  slug: string | null;
-  displayName: string | null; // user-set name (from -n flag)
-  startedAt: number; // epoch ms
-  lastActivityAt: number; // epoch ms of last JSONL line
+  room_id: string;
+  relative_dir: string | null;
   status: SessionStatus;
-  lastMessageRole: "user" | "assistant" | null;
-  lastMessageType: string | null;
-  jsonlPath: string | null;
-  groupId: string | null;
-  // Summaries (populated by summarizer)
-  summaryLatest: string | null; // Tier 1: latest message
-  summaryTask: string | null; // Tier 2: current task
-  summaryOverview: string | null; // Tier 3: session overview
-  // Stats
-  messageCount: number;
-  lastUserPrompt: string | null;
+  model: string;
+  tokens: string;           // "45k / 1M"
+  token_ratio: number;
+  last_activity: string;    // ISO 8601
+  tmux_session: string;
+  summary: {
+    latest: string;
+    current_task: string;
+    overview: string;
+  } | null;
+  messages: ConversationMessage[];  // preview (last 5)
 }
 
-/** User-defined session group */
-export interface SessionGroup {
-  id: string;
-  name: string;
-  summary: string | null; // Tier 4: group summary
-  color: string; // hex color
-  sortOrder: number;
-  sessionIds: string[];
+/** Rooms mapping from recon serve */
+export interface RoomsMap {
+  [roomId: string]: string[];
 }
-
-/** Tiered summary levels */
-export type SummaryTier = 1 | 2 | 3 | 4;
-
-/** Cached summary record */
-export interface Summary {
-  sessionId: string;
-  tier: SummaryTier;
-  summary: string;
-  generatedAt: number;
-  messageCountAt: number;
-}
-
-/** Process info from ps aux */
-export interface ProcessInfo {
-  pid: number;
-  cpu: number;
-  mem: number;
-  tty: string;
-  command: string;
-  isAlive: boolean;
-}
-
-/** WebSocket event types */
-export type WSEvent =
-  | { type: "session:update"; session: Session }
-  | { type: "session:new"; session: Session }
-  | { type: "session:end"; id: string }
-  | { type: "summary:update"; sessionId: string; tier: SummaryTier; summary: string }
-  | { type: "notification"; sessionId: string; notifType: string; message: string };
 
 /** Dashboard filter modes */
-export type FilterMode = "all" | "waiting" | "active" | "by-project" | "by-group";
+export type FilterMode = "all" | "input" | "working" | "by-project";
 
 /** Settings */
 export interface DashboardSettings {
-  llmProvider: "ollama" | "gemini";
-  ollamaModel: string;
-  ollamaUrl: string;
-  geminiApiKey: string | null;
   pollIntervalMs: number;
   notificationSound: boolean;
   notificationBrowser: boolean;
-  voiceEnabled: boolean;
-  autoGroupByProject: boolean;
 }
 
 export const DEFAULT_SETTINGS: DashboardSettings = {
-  llmProvider: "ollama",
-  ollamaModel: "qwen2.5:7b",
-  ollamaUrl: "http://localhost:11434",
-  geminiApiKey: null,
   pollIntervalMs: 3000,
   notificationSound: true,
   notificationBrowser: true,
-  voiceEnabled: false,
-  autoGroupByProject: true,
 };

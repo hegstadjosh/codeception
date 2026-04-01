@@ -15,8 +15,8 @@ import { ConversationView } from "./conversation-view";
 import { cn } from "@/lib/utils";
 import type { Session } from "@/lib/types";
 
-function relativeTime(epochMs: number): string {
-  const diffMs = Date.now() - epochMs;
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
   const diffSec = Math.floor(diffMs / 1000);
   if (diffSec < 60) return `${diffSec}s ago`;
   const diffMin = Math.floor(diffSec / 60);
@@ -36,6 +36,8 @@ interface SessionCardProps {
 export function SessionCard({ session, isPinned = false, onTogglePin }: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
 
   const handleKill = useCallback(async () => {
     if (!confirmKill) {
@@ -44,20 +46,48 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
       return;
     }
     try {
-      await fetch(`/api/sessions/${session.id}/kill`, { method: "POST" });
+      await fetch(`/api/sessions/${session.session_id}/kill`, { method: "POST" });
     } catch {
       // silently fail for now
     }
     setConfirmKill(false);
-  }, [confirmKill, session.id]);
+  }, [confirmKill, session.session_id]);
 
-  const handleReply = useCallback(() => {
-    // Will be wired to command bar or reply sheet later
-  }, []);
+  const handleReply = useCallback(async () => {
+    const text = replyText.trim();
+    if (!text) {
+      // Toggle inline reply input
+      setReplying((r) => !r);
+      return;
+    }
+    try {
+      await fetch(`/api/sessions/${session.session_id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      setReplyText("");
+      setReplying(false);
+    } catch {
+      // silently fail for now
+    }
+  }, [replyText, session.session_id]);
 
-  const handleOpenTerminal = useCallback(() => {
-    // Will open terminal via API later
-  }, []);
+  const handleFocus = useCallback(async () => {
+    try {
+      await fetch(`/api/sessions/${session.session_id}/focus`, { method: "POST" });
+    } catch {
+      // silently fail
+    }
+  }, [session.session_id]);
+
+  const handleResume = useCallback(async () => {
+    try {
+      await fetch(`/api/sessions/${session.session_id}/resume`, { method: "POST" });
+    } catch {
+      // silently fail
+    }
+  }, [session.session_id]);
 
   return (
     <Card
@@ -75,15 +105,15 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
       >
         <div className="flex items-center gap-2 min-w-0">
           <CardTitle className="truncate text-sm font-semibold text-zinc-100">
-            {session.displayName || session.projectName}
+            {session.project_name}
           </CardTitle>
-          {session.displayName && (
-            <span className="text-[11px] text-zinc-500">{session.projectName}</span>
+          {session.relative_dir && (
+            <span className="text-[11px] text-zinc-500">{session.relative_dir}</span>
           )}
           <StatusBadge status={session.status} />
-          {session.gitBranch && (
+          {session.branch && (
             <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
-              {session.gitBranch}
+              {session.branch}
             </span>
           )}
         </div>
@@ -98,7 +128,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
               )}
               onClick={(e) => {
                 e.stopPropagation();
-                onTogglePin(session.id);
+                onTogglePin(session.session_id);
               }}
               title={isPinned ? "Unpin session" : "Pin session"}
             >
@@ -106,7 +136,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             </button>
           )}
           <span className="font-mono text-[11px] text-zinc-500">
-            {relativeTime(session.lastActivityAt)}
+            {relativeTime(session.last_activity)}
           </span>
         </CardAction>
       </CardHeader>
@@ -115,43 +145,63 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
       <CardContent className="space-y-1.5 pt-0">
         {/* Tier 3: Overview */}
         <p className="text-xs text-zinc-500 leading-snug">
-          {session.summaryOverview || "No summary yet"}
+          {session.summary?.overview || "No summary yet"}
         </p>
 
         {/* Tier 2: Current task */}
-        {session.summaryTask && (
+        {session.summary?.current_task && (
           <p className="text-xs text-zinc-400 leading-snug">
-            {session.summaryTask}
+            {session.summary.current_task}
           </p>
         )}
 
         {/* Tier 1: Latest message (emphasized) */}
-        {session.summaryLatest && (
+        {session.summary?.latest && (
           <p className="text-[13px] text-zinc-200 leading-snug">
-            {session.summaryLatest}
+            {session.summary.latest}
           </p>
         )}
 
-        {/* Last user prompt */}
-        {session.lastUserPrompt && (
-          <div className="mt-1 rounded border border-zinc-800 bg-zinc-950/60 px-2.5 py-1.5">
-            <p className="font-mono text-[11px] text-zinc-500 leading-relaxed line-clamp-2">
-              {session.lastUserPrompt}
-            </p>
-          </div>
-        )}
-
-        {/* Session ID + message count */}
+        {/* Session metadata */}
         <div className="flex items-center gap-3 pt-1">
           <span className="font-mono text-[10px] text-zinc-600">
-            {session.id.slice(0, 8)}
+            {session.session_id.slice(0, 8)}
           </span>
           <span className="text-[10px] text-zinc-600">
-            {session.messageCount} messages
+            {session.tokens}
+          </span>
+          <span className="text-[10px] text-zinc-600">
+            {session.model}
           </span>
         </div>
 
         <Separator className="bg-zinc-800/60" />
+
+        {/* Inline reply input */}
+        {replying && (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleReply();
+                if (e.key === "Escape") { setReplying(false); setReplyText(""); }
+              }}
+              placeholder="Type a message..."
+              className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              autoFocus
+            />
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-zinc-400 hover:text-zinc-100"
+              onClick={handleReply}
+            >
+              Send
+            </Button>
+          </div>
+        )}
 
         {/* Actions row */}
         <div className="flex items-center gap-1.5">
@@ -161,7 +211,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             className="text-zinc-400 hover:text-zinc-100"
             onClick={(e) => {
               e.stopPropagation();
-              handleReply();
+              setReplying((r) => !r);
             }}
           >
             Reply
@@ -172,10 +222,21 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             className="text-zinc-400 hover:text-zinc-100"
             onClick={(e) => {
               e.stopPropagation();
-              handleOpenTerminal();
+              handleFocus();
             }}
           >
             Terminal
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            className="text-zinc-400 hover:text-zinc-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleResume();
+            }}
+          >
+            Resume
           </Button>
           <div className="flex-1" />
           <Button
@@ -202,7 +263,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
         <>
           <Separator className="bg-zinc-800/60" />
           <CardContent className="pt-0">
-            <ConversationView sessionId={session.id} />
+            <ConversationView sessionId={session.session_id} />
           </CardContent>
         </>
       )}

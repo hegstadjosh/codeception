@@ -14,9 +14,9 @@ export function FilterBar({
   activeFilter,
   onFilterChange,
 }: FilterBarProps) {
-  const waitingCount = sessions.filter((s) => s.status === "waiting").length;
-  const activeCount = sessions.filter((s) => s.status === "active").length;
-  const projectCount = new Set(sessions.map((s) => s.projectName)).size;
+  const inputCount = sessions.filter((s) => s.status === "input").length;
+  const workingCount = sessions.filter((s) => s.status === "working").length;
+  const projectCount = new Set(sessions.map((s) => s.project_name)).size;
 
   return (
     <Tabs
@@ -30,21 +30,21 @@ export function FilterBar({
             {sessions.length}
           </span>
         </TabsTrigger>
-        <TabsTrigger value="waiting" className="data-active:bg-zinc-800">
-          <span className={waitingCount > 0 ? "text-amber-400" : ""}>
-            Waiting
+        <TabsTrigger value="input" className="data-active:bg-zinc-800">
+          <span className={inputCount > 0 ? "text-amber-400" : ""}>
+            Input
           </span>
           <span
             className={`ml-1 text-[11px] ${
-              waitingCount > 0 ? "text-amber-400 font-semibold" : "text-zinc-500"
+              inputCount > 0 ? "text-amber-400 font-semibold" : "text-zinc-500"
             }`}
           >
-            {waitingCount}
+            {inputCount}
           </span>
         </TabsTrigger>
-        <TabsTrigger value="active" className="data-active:bg-zinc-800">
-          Active
-          <span className="ml-1 text-[11px] text-zinc-500">{activeCount}</span>
+        <TabsTrigger value="working" className="data-active:bg-zinc-800">
+          Working
+          <span className="ml-1 text-[11px] text-zinc-500">{workingCount}</span>
         </TabsTrigger>
         <TabsTrigger value="by-project" className="data-active:bg-zinc-800">
           By Project

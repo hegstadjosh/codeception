@@ -6,7 +6,7 @@ export async function POST(
 ) {
   const { id } = await params;
   try {
-    const res = await fetch(`${RECON}/api/sessions/${id}/kill`, {
+    const res = await fetch(`${RECON}/api/sessions/${id}/resume`, {
       method: "POST",
     });
     const data = await res.json();

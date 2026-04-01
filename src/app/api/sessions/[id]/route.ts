@@ -1,31 +1,18 @@
-import { NextResponse } from "next/server";
-import { scanSessions, getSessionMessages } from "@/lib/scanner";
+const RECON = "http://localhost:3100";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-
   try {
-    const sessions = await scanSessions();
-    const session = sessions.find((s) => s.id === id);
-
-    if (!session) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
-    }
-
-    const messages = getSessionMessages(id, session.cwd);
-
-    return NextResponse.json({ session, messages });
-  } catch (error) {
-    console.error(`Failed to get session ${id}:`, error);
-    return NextResponse.json(
-      { error: "Failed to get session" },
-      { status: 500 }
+    const res = await fetch(`${RECON}/api/sessions/${id}/messages`);
+    const data = await res.json();
+    return Response.json(data, { status: res.status });
+  } catch {
+    return Response.json(
+      { error: "Cannot reach recon serve at localhost:3100" },
+      { status: 502 }
     );
   }
 }

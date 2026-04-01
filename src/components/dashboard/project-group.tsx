@@ -20,8 +20,8 @@ export function ProjectGroup({
 }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
 
-  const hasActive = sessions.some((s) => s.status === "active");
-  const hasWaiting = sessions.some((s) => s.status === "waiting");
+  const hasWorking = sessions.some((s) => s.status === "working");
+  const hasInput = sessions.some((s) => s.status === "input");
 
   return (
     <div className="space-y-2">
@@ -39,8 +39,8 @@ export function ProjectGroup({
         <span className="rounded-full bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
           {sessions.length}
         </span>
-        {hasActive && <StatusBadge status="active" />}
-        {hasWaiting && !hasActive && <StatusBadge status="waiting" />}
+        {hasWorking && <StatusBadge status="working" />}
+        {hasInput && !hasWorking && <StatusBadge status="input" />}
       </button>
 
       {/* Sessions */}
@@ -48,9 +48,9 @@ export function ProjectGroup({
         <div className="space-y-2 pl-6">
           {sessions.map((session) => (
             <SessionCard
-              key={session.id}
+              key={session.session_id}
               session={session}
-              isPinned={pinnedIds.has(session.id)}
+              isPinned={pinnedIds.has(session.session_id)}
               onTogglePin={onTogglePin}
             />
           ))}

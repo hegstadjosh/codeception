@@ -23,11 +23,11 @@ export function useNotifications(sessions: Session[]) {
     const prev = prevStatuses.current;
 
     for (const session of sessions) {
-      const prevStatus = prev.get(session.id);
+      const prevStatus = prev.get(session.session_id);
       if (
         prevStatus !== undefined &&
-        prevStatus !== "waiting" &&
-        session.status === "waiting"
+        prevStatus !== "input" &&
+        session.status === "input"
       ) {
         // Fire browser notification
         if (
@@ -36,8 +36,8 @@ export function useNotifications(sessions: Session[]) {
           Notification.permission === "granted"
         ) {
           new Notification("Session needs attention", {
-            body: `${session.displayName || session.projectName} is waiting for input`,
-            tag: session.id,
+            body: `${session.project_name} is waiting for input`,
+            tag: session.session_id,
           });
         }
 
@@ -66,16 +66,16 @@ export function useNotifications(sessions: Session[]) {
     // Update previous statuses
     const next = new Map<string, SessionStatus>();
     for (const session of sessions) {
-      next.set(session.id, session.status);
+      next.set(session.session_id, session.status);
     }
     prevStatuses.current = next;
 
-    // Update document title with waiting count
+    // Update document title with input count
     if (typeof document !== "undefined") {
-      const waitingCount = sessions.filter((s) => s.status === "waiting").length;
+      const inputCount = sessions.filter((s) => s.status === "input").length;
       document.title =
-        waitingCount > 0
-          ? `(${waitingCount} waiting) Claude Manager`
+        inputCount > 0
+          ? `(${inputCount} waiting) Claude Manager`
           : "Claude Manager";
     }
   }, [sessions]);

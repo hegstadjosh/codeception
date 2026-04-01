@@ -8,16 +8,14 @@ import { CommandBar } from "@/components/dashboard/command-bar";
 import { SettingsPanel } from "@/components/dashboard/settings-panel";
 import { useNotifications } from "@/lib/use-notifications";
 import { useSettings } from "@/lib/use-settings";
-import type { Session, SessionStatus, FilterMode } from "@/lib/types";
+import type { Session, SessionStatus, FilterMode, RoomsMap } from "@/lib/types";
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
-  waiting: 0,
-  active: 1,
+  input: 0,
+  working: 1,
   idle: 2,
-  stale: 3,
-  completed: 4,
-  dead: 5,
+  new: 3,
 };
 
 const PINNED_STORAGE_KEY = "claude-manager-pinned";
@@ -38,6 +36,7 @@ function savePinnedIds(ids: Set<string>) {
 
 export default function DashboardPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [rooms, setRooms] = useState<RoomsMap>({});
   const [filter, setFilter] = useState<FilterMode>("all");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +58,7 @@ export default function DashboardPage() {
     });
   }, []);
 
-  // Poll sessions every 3 seconds
+  // Poll sessions every N seconds
   useEffect(() => {
     let active = true;
 
@@ -69,7 +68,8 @@ export default function DashboardPage() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (active) {
-          setSessions(data.sessions ?? data ?? []);
+          setSessions(data.sessions ?? []);
+          setRooms(data.rooms ?? {});
           setError(null);
         }
       } catch (err) {
@@ -94,15 +94,15 @@ export default function DashboardPage() {
   const sortSessions = useCallback(
     (list: Session[]) =>
       [...list].sort((a, b) => {
-        const aPinned = pinnedIds.has(a.id) ? 0 : 1;
-        const bPinned = pinnedIds.has(b.id) ? 0 : 1;
+        const aPinned = pinnedIds.has(a.session_id) ? 0 : 1;
+        const bPinned = pinnedIds.has(b.session_id) ? 0 : 1;
         if (aPinned !== bPinned) return aPinned - bPinned;
 
         const pa = STATUS_PRIORITY[a.status] ?? 99;
         const pb = STATUS_PRIORITY[b.status] ?? 99;
         if (pa !== pb) return pa - pb;
 
-        return b.lastActivityAt - a.lastActivityAt;
+        return new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime();
       }),
     [pinnedIds]
   );
@@ -111,50 +111,55 @@ export default function DashboardPage() {
   const filteredSessions = useMemo(() => {
     let result = sessions;
 
-    if (filter === "waiting") {
-      result = sessions.filter((s) => s.status === "waiting");
-    } else if (filter === "active") {
-      result = sessions.filter((s) => s.status === "active");
+    if (filter === "input") {
+      result = sessions.filter((s) => s.status === "input");
+    } else if (filter === "working") {
+      result = sessions.filter((s) => s.status === "working");
     }
 
     return sortSessions(result);
   }, [sessions, filter, sortSessions]);
 
-  // Group sessions by project for "by-project" view
+  // Group sessions by room for "by-project" view
   const projectGroups = useMemo(() => {
     if (filter !== "by-project") return null;
 
-    const groups = new Map<string, Session[]>();
-    for (const session of sessions) {
-      const key = session.projectName;
-      const list = groups.get(key);
-      if (list) {
-        list.push(session);
-      } else {
-        groups.set(key, [session]);
+    // Use rooms from the API response
+    const groups: { name: string; sessions: Session[] }[] = [];
+    const sessionMap = new Map(sessions.map((s) => [s.session_id, s]));
+    const assigned = new Set<string>();
+
+    for (const [roomId, sessionIds] of Object.entries(rooms)) {
+      const roomSessions = sessionIds
+        .map((id) => sessionMap.get(id))
+        .filter((s): s is Session => s != null);
+      if (roomSessions.length > 0) {
+        groups.push({ name: roomId, sessions: sortSessions(roomSessions) });
+        sessionIds.forEach((id) => assigned.add(id));
       }
     }
 
-    // Sort groups: groups with waiting/active sessions first, then alphabetically
-    return [...groups.entries()]
-      .sort(([nameA, sessionsA], [nameB, sessionsB]) => {
-        const aHasUrgent = sessionsA.some(
-          (s) => s.status === "waiting" || s.status === "active"
-        );
-        const bHasUrgent = sessionsB.some(
-          (s) => s.status === "waiting" || s.status === "active"
-        );
-        if (aHasUrgent !== bHasUrgent) return aHasUrgent ? -1 : 1;
-        return nameA.localeCompare(nameB);
-      })
-      .map(([name, groupSessions]) => ({
-        name,
-        sessions: sortSessions(groupSessions),
-      }));
-  }, [sessions, filter, sortSessions]);
+    // Any sessions not in a room get their own group
+    const ungrouped = sessions.filter((s) => !assigned.has(s.session_id));
+    if (ungrouped.length > 0) {
+      groups.push({ name: "Ungrouped", sessions: sortSessions(ungrouped) });
+    }
+
+    // Sort groups: groups with input/working sessions first, then alphabetically
+    return groups.sort((a, b) => {
+      const aHasUrgent = a.sessions.some(
+        (s) => s.status === "input" || s.status === "working"
+      );
+      const bHasUrgent = b.sessions.some(
+        (s) => s.status === "input" || s.status === "working"
+      );
+      if (aHasUrgent !== bHasUrgent) return aHasUrgent ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [sessions, rooms, filter, sortSessions]);
 
   const liveCount = sessions.filter(
-    (s) => s.status === "active" || s.status === "waiting" || s.status === "idle"
+    (s) => s.status === "working" || s.status === "input" || s.status === "idle"
   ).length;
 
   return (
@@ -244,9 +249,9 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {filteredSessions.map((session) => (
               <SessionCard
-                key={session.id}
+                key={session.session_id}
                 session={session}
-                isPinned={pinnedIds.has(session.id)}
+                isPinned={pinnedIds.has(session.session_id)}
                 onTogglePin={togglePin}
               />
             ))}

@@ -16,14 +16,14 @@ export function useSessionHistory(sessions: Session[]) {
 
   useEffect(() => {
     const prev = prevSnapshot.current;
-    const currentIds = new Set(sessions.map((s) => s.id));
-    const currentStatuses = new Map(sessions.map((s) => [s.id, s.status] as const));
+    const currentIds = new Set(sessions.map((s) => s.session_id));
+    const currentStatuses = new Map(sessions.map((s) => [s.session_id, s.status] as const));
 
     // Detect new sessions
     const freshNew: string[] = [];
     sessions.forEach((s) => {
-      if (!prev.ids.has(s.id)) {
-        freshNew.push(s.id);
+      if (!prev.ids.has(s.session_id)) {
+        freshNew.push(s.session_id);
       }
     });
 
