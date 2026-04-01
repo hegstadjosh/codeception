@@ -244,8 +244,10 @@ function extractProjectName(cwd: string): string {
 /** Extract display name from custom-title message */
 function getDisplayName(messages: ConversationMessage[]): string | null {
   for (const msg of messages) {
-    if ((msg as Record<string, unknown>).type === "custom-title") {
-      return ((msg as Record<string, unknown>).customTitle as string) ?? null;
+    // custom-title messages have a different shape than conversation messages
+    const raw = msg as unknown as { type: string; customTitle?: string };
+    if (raw.type === "custom-title" && raw.customTitle) {
+      return raw.customTitle;
     }
   }
   return null;

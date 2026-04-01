@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -20,14 +21,75 @@ function formatTime(iso: string): string {
   });
 }
 
-/**
- * Render message content — handles all real shapes from Claude Code JSONL:
- * - string (user typed text)
- * - array of blocks: text, thinking, tool_use, tool_result, tool_reference
- */
-function renderContent(content: unknown) {
+// ---------- Markdown renderer ----------
+
+function Markdown({ text }: { text: string }) {
+  return (
+    <div className="prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-1 prose-code:text-[12px] prose-code:bg-zinc-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800 prose-a:text-blue-400">
+      <ReactMarkdown>{text}</ReactMarkdown>
+    </div>
+  );
+}
+
+// ---------- Message classification ----------
+
+type MessageKind =
+  | "user-text"      // Real human message
+  | "assistant-text"  // Claude's text response
+  | "tool-call"       // Claude calling a tool
+  | "tool-result"     // Tool output returned to Claude
+  | "thinking"        // Claude's thinking block
+  | "skip";           // Don't display
+
+function classifyMessage(msg: ConversationMessage): MessageKind {
+  const content = msg.message?.content;
+  if (content == null) return "skip";
+
+  const role = msg.message?.role;
+
+  // String content is always real user text
+  if (typeof content === "string") return "user-text";
+
+  if (!Array.isArray(content)) return "skip";
+  if (content.length === 0) return "skip";
+
+  // Check what block types are present
+  const blockTypes = new Set(
+    content.map((b: Record<string, unknown>) => b.type as string)
+  );
+
+  if (role === "assistant") {
+    if (blockTypes.has("tool_use")) return "tool-call";
+    if (blockTypes.has("thinking") && !blockTypes.has("text")) return "thinking";
+    return "assistant-text";
+  }
+
+  if (role === "user") {
+    if (blockTypes.has("tool_result")) return "tool-result";
+    return "user-text";
+  }
+
+  return "skip";
+}
+
+const KIND_STYLES: Record<MessageKind, { label: string; color: string }> = {
+  "user-text":      { label: "You",    color: "text-blue-400" },
+  "assistant-text":  { label: "Claude", color: "text-violet-400" },
+  "tool-call":       { label: "Tool",   color: "text-amber-500" },
+  "tool-result":     { label: "Output", color: "text-zinc-500" },
+  "thinking":        { label: "Think",  color: "text-zinc-600" },
+  "skip":            { label: "",       color: "" },
+};
+
+// ---------- Content rendering ----------
+
+function renderContent(content: unknown, kind: MessageKind) {
   if (typeof content === "string") {
-    return <span className="whitespace-pre-wrap">{content}</span>;
+    // User typed text — render as markdown too (might have backticks etc)
+    if (kind === "user-text") {
+      return <span className="whitespace-pre-wrap">{content}</span>;
+    }
+    return <Markdown text={content} />;
   }
   if (!Array.isArray(content)) return null;
 
@@ -36,56 +98,84 @@ function renderContent(content: unknown) {
     const type = block.type as string;
 
     if (type === "text") {
-      return (
-        <span key={i} className="whitespace-pre-wrap">
-          {block.text as string}
-        </span>
-      );
+      const text = block.text as string;
+      // User text stays plain, assistant text gets markdown
+      if (kind === "user-text") {
+        return (
+          <span key={i} className="whitespace-pre-wrap">
+            {text}
+          </span>
+        );
+      }
+      return <Markdown key={i} text={text} />;
     }
 
     if (type === "thinking") {
       const text = block.thinking as string;
       return (
-        <details key={i} className="mt-1">
-          <summary className="cursor-pointer text-[11px] text-zinc-500 hover:text-zinc-400">
-            thinking...
+        <details key={i}>
+          <summary className="cursor-pointer text-[11px] text-zinc-600 hover:text-zinc-500">
+            {text.length > 80 ? text.slice(0, 80) + "..." : text}
           </summary>
-          <div className="mt-1 rounded border border-zinc-800 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-500 max-h-32 overflow-y-auto">
-            {text.length > 500 ? text.slice(0, 500) + "..." : text}
+          <div className="mt-1 rounded border border-zinc-800 bg-zinc-950/60 px-2 py-1 font-mono text-xs text-zinc-600 max-h-32 overflow-y-auto whitespace-pre-wrap">
+            {text}
           </div>
         </details>
       );
     }
 
     if (type === "tool_use") {
+      const name = block.name as string;
+      const input = block.input as Record<string, unknown> | undefined;
+      // Show a short preview of the input
+      let preview = "";
+      if (input) {
+        if (input.command) preview = String(input.command).slice(0, 60);
+        else if (input.file_path) preview = String(input.file_path).split("/").pop() ?? "";
+        else if (input.pattern) preview = String(input.pattern);
+        else if (input.query) preview = String(input.query).slice(0, 60);
+      }
       return (
-        <Badge
-          key={i}
-          variant="secondary"
-          className="bg-zinc-800 text-zinc-300 text-[11px] font-mono"
-        >
-          {block.name as string}
-        </Badge>
+        <span key={i} className="inline-flex items-center gap-1.5">
+          <Badge
+            variant="secondary"
+            className="bg-amber-950/40 text-amber-400/80 text-[11px] font-mono border-amber-900/30"
+          >
+            {name}
+          </Badge>
+          {preview && (
+            <span className="font-mono text-[11px] text-zinc-500 truncate max-w-xs">
+              {preview}
+            </span>
+          )}
+        </span>
       );
     }
 
     if (type === "tool_result") {
       const raw = block.content;
+      const isError = block.is_error as boolean;
       const text =
         typeof raw === "string"
           ? raw
           : Array.isArray(raw)
-            ? raw.map((r: Record<string, unknown>) => r.tool_name ?? r.text ?? JSON.stringify(r)).join(", ")
-            : JSON.stringify(raw);
-      const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
+            ? raw
+                .map((r: Record<string, unknown>) =>
+                  r.tool_name ?? r.text ?? JSON.stringify(r)
+                )
+                .join(", ")
+            : raw == null
+              ? "(empty)"
+              : JSON.stringify(raw);
+      const truncated = text.length > 300 ? text.slice(0, 300) + "..." : text;
       return (
         <div
           key={i}
           className={cn(
-            "mt-1 rounded border px-2 py-1 font-mono text-xs",
-            block.is_error
-              ? "border-red-800/50 bg-red-950/30 text-red-300"
-              : "border-zinc-800 bg-zinc-900/50 text-zinc-400"
+            "rounded border px-2 py-1 font-mono text-xs whitespace-pre-wrap",
+            isError
+              ? "border-red-800/50 bg-red-950/30 text-red-400"
+              : "border-zinc-800/50 bg-zinc-900/40 text-zinc-500"
           )}
         >
           {truncated}
@@ -105,15 +195,17 @@ function renderContent(content: unknown) {
       );
     }
 
-    // Unknown block type — skip silently
     return null;
   });
 }
+
+// ---------- Component ----------
 
 export function ConversationView({ sessionId }: ConversationViewProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showToolIO, setShowToolIO] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -170,40 +262,58 @@ export function ConversationView({ sessionId }: ConversationViewProps) {
     );
   }
 
-  // Filter to only user/assistant messages with content
-  const displayMessages = messages.filter(
-    (msg) =>
-      (msg.type === "user" || msg.type === "assistant") &&
-      msg.message?.content != null
-  );
+  // Classify all messages
+  const classified = messages
+    .map((msg) => ({ msg, kind: classifyMessage(msg) }))
+    .filter(({ kind }) => kind !== "skip");
+
+  // By default hide tool-call and tool-result (noisy). Toggle to show.
+  const displayed = showToolIO
+    ? classified
+    : classified.filter(
+        ({ kind }) => kind !== "tool-call" && kind !== "tool-result" && kind !== "thinking"
+      );
 
   return (
-    <ScrollArea className="h-[400px]">
-      <div className="space-y-1 p-3">
-        {displayMessages.map((msg) => {
-          const isUser = msg.message!.role === "user";
-
-          return (
-            <div key={msg.uuid} className="group flex gap-2 py-1.5">
-              <span className="shrink-0 font-mono text-[11px] text-zinc-600 pt-0.5 select-none">
-                {formatTime(msg.timestamp)}
-              </span>
-              <span
-                className={cn(
-                  "shrink-0 w-12 text-[11px] font-medium pt-0.5",
-                  isUser ? "text-blue-400" : "text-violet-400"
-                )}
-              >
-                {isUser ? "You" : "Claude"}
-              </span>
-              <div className="min-w-0 flex-1 text-sm text-zinc-200 leading-relaxed">
-                {renderContent(msg.message!.content)}
-              </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
+    <div>
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <span className="text-[11px] text-zinc-600">
+          {classified.length} messages
+        </span>
+        <button
+          onClick={() => setShowToolIO((v) => !v)}
+          className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          {showToolIO ? "Hide tool calls" : "Show tool calls"}
+        </button>
       </div>
-    </ScrollArea>
+      <ScrollArea className="h-[400px]">
+        <div className="space-y-0.5 px-3 pb-3">
+          {displayed.map(({ msg, kind }) => {
+            const style = KIND_STYLES[kind];
+
+            return (
+              <div key={msg.uuid} className="group flex gap-2 py-1">
+                <span className="shrink-0 font-mono text-[11px] text-zinc-700 pt-0.5 select-none w-16">
+                  {formatTime(msg.timestamp)}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 w-12 text-[11px] font-medium pt-0.5",
+                    style.color
+                  )}
+                >
+                  {style.label}
+                </span>
+                <div className="min-w-0 flex-1 text-sm text-zinc-200 leading-relaxed">
+                  {renderContent(msg.message!.content, kind)}
+                </div>
+              </div>
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
