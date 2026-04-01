@@ -75,7 +75,7 @@ export function useNotifications(sessions: Session[]) {
       const inputCount = sessions.filter((s) => s.status === "input").length;
       document.title =
         inputCount > 0
-          ? `(${inputCount} waiting) Claude Manager`
+          ? `(${inputCount} needs input) Claude Manager`
           : "Claude Manager";
     }
   }, [sessions]);

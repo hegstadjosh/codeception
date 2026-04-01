@@ -1,0 +1,126 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+
+interface NewSessionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) {
+  const [cwd, setCwd] = useState("~/");
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleCreate = useCallback(async () => {
+    if (!cwd.trim() || loading) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cwd: cwd.trim(),
+          name: name.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+
+      // Success — close and reset
+      onOpenChange(false);
+      setCwd("~/");
+      setName("");
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create session");
+    } finally {
+      setLoading(false);
+    }
+  }, [cwd, name, loading, onOpenChange]);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="overflow-y-auto bg-zinc-950 border-zinc-800"
+      >
+        <SheetHeader>
+          <SheetTitle className="text-zinc-100">New Session</SheetTitle>
+          <SheetDescription className="text-zinc-500">
+            Launch a new Claude Code session
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex flex-col gap-5 px-4 pb-6">
+          <div className="flex flex-col gap-2">
+            <Label className="text-sm text-zinc-300">Project directory</Label>
+            <Input
+              value={cwd}
+              onChange={(e) => setCwd(e.target.value)}
+              placeholder="~/projects/my-app"
+              className="bg-zinc-900 border-zinc-700 text-zinc-200 font-mono text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label className="text-sm text-zinc-300">
+              Session name{" "}
+              <span className="text-zinc-600 font-normal">(optional)</span>
+            </Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Auto-generated from directory"
+              className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+              }}
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+
+          <Button
+            onClick={handleCreate}
+            disabled={loading || !cwd.trim()}
+            className="w-full bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+          >
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="h-3 w-3 animate-spin rounded-full border border-zinc-500 border-t-zinc-900" />
+                Creating...
+              </span>
+            ) : (
+              "Create"
+            )}
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

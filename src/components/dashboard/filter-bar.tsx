@@ -32,15 +32,15 @@ export function FilterBar({
         </TabsTrigger>
         <TabsTrigger value="input" className="data-active:bg-zinc-800">
           <span className={inputCount > 0 ? "text-amber-400" : ""}>
-            Input
+            Needs Input
           </span>
-          <span
-            className={`ml-1 text-[11px] ${
-              inputCount > 0 ? "text-amber-400 font-semibold" : "text-zinc-500"
-            }`}
-          >
-            {inputCount}
-          </span>
+          {inputCount > 0 ? (
+            <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500/20 px-1 text-[11px] font-semibold text-amber-400">
+              {inputCount}
+            </span>
+          ) : (
+            <span className="ml-1 text-[11px] text-zinc-500">0</span>
+          )}
         </TabsTrigger>
         <TabsTrigger value="working" className="data-active:bg-zinc-800">
           Working
