@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "./status-badge";
 import { ConversationView } from "./conversation-view";
 import { cn } from "@/lib/utils";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { Session } from "@/lib/types";
 
 function relativeTime(iso: string): string {
@@ -38,19 +39,42 @@ interface SessionCardProps {
 export function SessionCard({ session, isPinned = false, onTogglePin }: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
-  const [replyOpen, setReplyOpen] = useState(false);
-  const [replyText, setReplyText] = useState("");
-  const [replyState, setReplyState] = useState<ActionState>("idle");
-  const [replyError, setReplyError] = useState("");
   const [killState, setKillState] = useState<ActionState>("idle");
   const [killError, setKillError] = useState("");
-  const [focusState, setFocusState] = useState<ActionState>("idle");
-  const [focusError, setFocusError] = useState("");
-  const [resumeState, setResumeState] = useState<ActionState>("idle");
-  const [resumeError, setResumeError] = useState("");
+  const [openState, setOpenState] = useState<ActionState>("idle");
+  const [openError, setOpenError] = useState("");
   const killTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isManaged = session.managed !== false;
+  const isAlive = session.status === "working" || session.status === "input" || session.status === "new";
+
+  // One smart "Open" button — knows whether to focus or resume
+  const handleOpen = useCallback(async () => {
+    setOpenState("loading");
+    setOpenError("");
+    try {
+      if (isAlive) {
+        // Session is running — focus its terminal
+        const res = await fetch(`/api/sessions/${session.session_id}/focus`, { method: "POST" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Focus failed" }));
+          throw new Error(data.error || `Focus failed (${res.status})`);
+        }
+      } else {
+        // Session is dead — resume in a new terminal
+        const res = await fetch(`/api/sessions/${session.session_id}/resume`, { method: "POST" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({ error: "Resume failed" }));
+          throw new Error(data.error || `Resume failed (${res.status})`);
+        }
+      }
+      setOpenState("success");
+      setTimeout(() => setOpenState("idle"), 2000);
+    } catch (e) {
+      setOpenState("error");
+      setOpenError(e instanceof Error ? e.message : "Failed");
+    }
+  }, [isAlive, session.session_id]);
 
   const handleKill = useCallback(async () => {
     if (!confirmKill) {
@@ -76,87 +100,42 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
     setConfirmKill(false);
   }, [confirmKill, session.session_id]);
 
-  const handleSendReply = useCallback(async () => {
-    const text = replyText.trim();
-    if (!text) return;
-    setReplyState("loading");
-    setReplyError("");
-    try {
-      const res = await fetch(`/api/sessions/${session.session_id}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Reply failed" }));
-        throw new Error(data.error || `Reply failed (${res.status})`);
-      }
-      setReplyText("");
-      setReplyState("success");
-      setTimeout(() => {
-        setReplyState("idle");
-        setReplyOpen(false);
-      }, 1500);
-    } catch (e) {
-      setReplyState("error");
-      setReplyError(e instanceof Error ? e.message : "Reply failed");
-    }
-  }, [replyText, session.session_id]);
+  // Open button label + tooltip
+  const openLabel = openState === "loading"
+    ? "Opening..."
+    : openState === "success"
+      ? "Opened"
+      : isAlive
+        ? "Switch to Terminal"
+        : "Resume in Terminal";
 
-  const handleFocus = useCallback(async () => {
-    setFocusState("loading");
-    setFocusError("");
-    try {
-      const res = await fetch(`/api/sessions/${session.session_id}/focus`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Focus failed" }));
-        throw new Error(data.error || `Focus failed (${res.status})`);
-      }
-      setFocusState("idle");
-    } catch (e) {
-      setFocusState("error");
-      setFocusError(e instanceof Error ? e.message : "Focus failed");
-    }
-  }, [session.session_id]);
-
-  const handleResume = useCallback(async () => {
-    setResumeState("loading");
-    setResumeError("");
-    try {
-      const res = await fetch(`/api/sessions/${session.session_id}/resume`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Resume failed" }));
-        throw new Error(data.error || `Resume failed (${res.status})`);
-      }
-      setResumeState("success");
-      setTimeout(() => setResumeState("idle"), 2000);
-    } catch (e) {
-      setResumeState("error");
-      setResumeError(e instanceof Error ? e.message : "Resume failed");
-    }
-  }, [session.session_id]);
-
-  const actionErrors = [
-    killError && `Kill: ${killError}`,
-    focusError && `Terminal: ${focusError}`,
-    resumeError && `Resume: ${resumeError}`,
-  ].filter(Boolean);
+  const openTooltip = isAlive
+    ? isManaged
+      ? "Open the terminal window for this session"
+      : "Bring Terminal.app to front (session is in a regular terminal)"
+    : "Resume this session in a new terminal window";
 
   return (
     <Card
       size="sm"
       className={cn(
-        "bg-zinc-900/60 ring-zinc-800/80 transition-colors hover:ring-zinc-700/80 cursor-pointer",
+        "bg-zinc-900/60 ring-zinc-800/80 transition-colors hover:ring-zinc-700/80",
         expanded && "ring-zinc-600/60",
         isPinned && "border-l-2 border-l-amber-500/60"
       )}
     >
-      {/* Header row */}
+      {/* Header row — always clickable to expand/collapse */}
       <CardHeader
-        className="pb-0 cursor-pointer"
+        className="pb-0 cursor-pointer select-none"
         onClick={() => setExpanded((e) => !e)}
       >
         <div className="flex items-center gap-2 min-w-0">
+          {/* Expand/collapse chevron */}
+          {expanded ? (
+            <ChevronDown className="size-3.5 text-zinc-500 shrink-0" />
+          ) : (
+            <ChevronRight className="size-3.5 text-zinc-500 shrink-0" />
+          )}
           <CardTitle className="truncate text-sm font-semibold text-zinc-100">
             {session.project_name}
           </CardTitle>
@@ -194,28 +173,28 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
         </CardAction>
       </CardHeader>
 
-      {/* Summary tiers */}
+      {/* Summary + metadata (always visible) */}
       <CardContent className="space-y-1.5 pt-0">
-        {/* Tier 3: Overview — dimmer, smaller */}
+        {/* Tier 3: Overview */}
         <p className="text-[11px] text-zinc-600 leading-snug">
           {session.summary?.overview || "No summary yet"}
         </p>
 
-        {/* Tier 2: Current task — normal weight */}
+        {/* Tier 2: Current task */}
         {session.summary?.current_task && (
           <p className="text-xs text-zinc-400 leading-snug">
             {session.summary.current_task}
           </p>
         )}
 
-        {/* Tier 1: Latest — emphasized */}
+        {/* Tier 1: Latest */}
         {session.summary?.latest && (
           <p className="text-[13px] font-medium text-zinc-200 leading-snug">
             {session.summary.latest}
           </p>
         )}
 
-        {/* Session metadata */}
+        {/* Metadata */}
         <div className="flex items-center gap-3 pt-1">
           <span className="font-mono text-[10px] text-zinc-600">
             {session.session_id.slice(0, 8)}
@@ -226,144 +205,117 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
           <span className="font-mono text-[10px] text-zinc-500">
             {session.tokens}
           </span>
+          {!isManaged && (
+            <span className="text-[10px] text-zinc-600 italic" title="Running in a regular terminal, not tmux. Some features limited.">
+              terminal
+            </span>
+          )}
         </div>
 
         <Separator className="bg-zinc-800/60" />
 
-        {/* Inline reply input */}
-        {replyOpen && (
-          <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSendReply();
-                  if (e.key === "Escape") { setReplyOpen(false); setReplyText(""); setReplyError(""); }
-                }}
-                placeholder="Type a message..."
-                className="flex-1 rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-                autoFocus
-                disabled={replyState === "loading"}
-              />
-              <Button
-                variant="ghost"
-                size="xs"
-                className="text-zinc-400 hover:text-zinc-100"
-                onClick={handleSendReply}
-                disabled={replyState === "loading" || !replyText.trim()}
-                title="Send reply"
-              >
-                {replyState === "loading" ? "Sending..." : "Send"}
-              </Button>
-            </div>
-            {replyState === "success" && (
-              <p className="text-xs text-emerald-400">Sent</p>
-            )}
-            {replyState === "error" && replyError && (
-              <p className="text-xs text-red-400">{replyError}</p>
-            )}
-          </div>
-        )}
-
-        {/* Actions row */}
+        {/* Actions — simplified to two buttons */}
         <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-zinc-400 hover:text-zinc-100"
-            disabled={!isManaged}
-            title={
-              isManaged
-                ? "Send a reply to this session"
-                : "Can only reply to tmux-managed sessions"
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isManaged) {
-                setReplyOpen((r) => !r);
-                setReplyError("");
-              }
-            }}
-          >
-            Reply
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-zinc-400 hover:text-zinc-100"
-            disabled={focusState === "loading"}
-            title={
-              isManaged
-                ? "Open terminal attached to this tmux session"
-                : "Bring Terminal.app to front"
-            }
-            onClick={(e) => {
-              e.stopPropagation();
-              handleFocus();
-            }}
-          >
-            {focusState === "loading" ? "Opening..." : "Open Terminal"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-zinc-400 hover:text-zinc-100"
-            disabled={resumeState === "loading"}
-            title="Resume this session in a new terminal window"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleResume();
-            }}
-          >
-            {resumeState === "loading"
-              ? "Resuming..."
-              : resumeState === "success"
-                ? "Opened in Terminal"
-                : "Resume"}
-          </Button>
-          <div className="flex-1" />
+          {/* Smart Open button */}
           <Button
             variant="ghost"
             size="xs"
             className={cn(
               "transition-colors",
-              confirmKill
-                ? "text-red-400 bg-red-950/40 hover:bg-red-950/60 hover:text-red-300"
-                : "text-zinc-500 hover:text-red-400"
+              openState === "success"
+                ? "text-emerald-400"
+                : "text-zinc-400 hover:text-zinc-100"
             )}
-            disabled={killState === "loading"}
-            title={confirmKill ? "Click again to confirm kill" : "Kill this session"}
+            disabled={openState === "loading"}
+            title={openTooltip}
             onClick={(e) => {
               e.stopPropagation();
-              handleKill();
+              handleOpen();
             }}
           >
-            {killState === "loading"
-              ? "Killing..."
-              : confirmKill
-                ? "Confirm Kill"
-                : "Kill"}
+            {openLabel}
           </Button>
+
+          {/* View conversation (if not already expanded) */}
+          {!expanded && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-zinc-400 hover:text-zinc-100"
+              title="View conversation history"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(true);
+              }}
+            >
+              View Chat
+            </Button>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Kill */}
+          {isAlive && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className={cn(
+                "transition-colors",
+                confirmKill
+                  ? "text-red-400 bg-red-950/40 hover:bg-red-950/60 hover:text-red-300"
+                  : "text-zinc-500 hover:text-red-400"
+              )}
+              disabled={killState === "loading"}
+              title={confirmKill ? "Click again to confirm kill" : "Kill this session"}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleKill();
+              }}
+            >
+              {killState === "loading"
+                ? "Killing..."
+                : confirmKill
+                  ? "Confirm Kill"
+                  : "Kill"}
+            </Button>
+          )}
         </div>
 
-        {/* Action errors */}
-        {actionErrors.length > 0 && (
+        {/* Errors */}
+        {(killError || openError) && (
           <div className="space-y-0.5">
-            {actionErrors.map((err) => (
-              <p key={err} className="text-xs text-red-400">{err}</p>
-            ))}
+            {killError && <p className="text-xs text-red-400">Kill: {killError}</p>}
+            {openError && <p className="text-xs text-red-400">{openError}</p>}
           </div>
         )}
       </CardContent>
 
-      {/* Expanded conversation view */}
+      {/* Expanded conversation view with reply input */}
       {expanded && (
         <>
           <Separator className="bg-zinc-800/60" />
-          <CardContent className="pt-0">
-            <ConversationView sessionId={session.session_id} />
+          <CardContent className="pt-0 relative">
+            {/* Collapse button — sticky at top right */}
+            <div className="flex justify-end py-1">
+              <Button
+                variant="ghost"
+                size="xs"
+                className="text-zinc-500 hover:text-zinc-300"
+                title="Collapse conversation"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded(false);
+                }}
+              >
+                <X className="size-3.5 mr-1" />
+                Close
+              </Button>
+            </div>
+            <ConversationView
+              sessionId={session.session_id}
+              managed={isManaged}
+              isAlive={isAlive}
+            />
           </CardContent>
         </>
       )}
