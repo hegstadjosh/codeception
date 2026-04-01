@@ -26,6 +26,7 @@ export interface Session {
   tokens: string;           // "45k / 1M"
   token_ratio: number;
   last_activity: string;    // ISO 8601
+  managed: boolean;
   tmux_session: string;
   summary: {
     latest: string;
