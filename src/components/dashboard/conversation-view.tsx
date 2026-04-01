@@ -41,17 +41,72 @@ type MessageKind =
   | "thinking"        // Claude's thinking block
   | "skip";           // Don't display
 
+/** Patterns that indicate system/protocol content, not real conversation */
+const SYSTEM_PATTERNS = [
+  /^<teammate-message/,
+  /^<task-notification/,
+  /^<system-reminder/,
+  /^<local-command-stdout/,
+  /^\{"type":"idle_notification"/,
+  /^\{"type":"shutdown/,
+  /^\{"type":"task_assignment"/,
+  /^<command-name>/,
+];
+
+function isSystemContent(text: string): boolean {
+  return SYSTEM_PATTERNS.some((p) => p.test(text.trim()));
+}
+
+/** Extract the visible text from content, stripping system tags */
+function extractVisibleText(content: string): string {
+  // Strip <system-reminder>...</system-reminder> blocks
+  let cleaned = content.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "");
+  // Strip <teammate-message ...>...</teammate-message> blocks
+  cleaned = cleaned.replace(/<teammate-message[\s\S]*?<\/teammate-message>/g, "");
+  // Strip <task-notification>...</task-notification>
+  cleaned = cleaned.replace(/<task-notification>[\s\S]*?<\/task-notification>/g, "");
+  // Strip <local-command-stdout>...</local-command-stdout>
+  cleaned = cleaned.replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, "");
+  // Strip <command-name>...</command-name> and <command-message>...</command-message> and <command-args>...</command-args>
+  cleaned = cleaned.replace(/<command-\w+>[\s\S]*?<\/command-\w+>/g, "");
+  return cleaned.trim();
+}
+
 function classifyMessage(msg: ConversationMessage): MessageKind {
   const content = msg.message?.content;
   if (content == null) return "skip";
 
   const role = msg.message?.role;
 
-  // String content is always real user text
-  if (typeof content === "string") return "user-text";
+  // String content — check for system/protocol messages
+  if (typeof content === "string") {
+    // If entire message is system content, skip it
+    if (isSystemContent(content)) return "skip";
+    // If it contains system tags mixed with real text, still show as user-text
+    // (extractVisibleText will clean it at render time)
+    return "user-text";
+  }
 
   if (!Array.isArray(content)) return "skip";
   if (content.length === 0) return "skip";
+
+  // Check for text blocks that are entirely system content
+  const textBlocks = content.filter(
+    (b: Record<string, unknown>) => b.type === "text"
+  );
+  if (
+    role === "user" &&
+    textBlocks.length > 0 &&
+    textBlocks.every((b: Record<string, unknown>) =>
+      isSystemContent(String(b.text ?? ""))
+    )
+  ) {
+    // Check if there are also non-text blocks (tool_result etc)
+    const hasOther = content.some(
+      (b: Record<string, unknown>) => b.type !== "text"
+    );
+    if (!hasOther) return "skip";
+  }
 
   // Check what block types are present
   const blockTypes = new Set(
@@ -85,11 +140,12 @@ const KIND_STYLES: Record<MessageKind, { label: string; color: string }> = {
 
 function renderContent(content: unknown, kind: MessageKind) {
   if (typeof content === "string") {
-    // User typed text — render as markdown too (might have backticks etc)
+    const cleaned = kind === "user-text" ? extractVisibleText(content) : content;
+    if (!cleaned) return null;
     if (kind === "user-text") {
-      return <span className="whitespace-pre-wrap">{content}</span>;
+      return <span className="whitespace-pre-wrap">{cleaned}</span>;
     }
-    return <Markdown text={content} />;
+    return <Markdown text={cleaned} />;
   }
   if (!Array.isArray(content)) return null;
 
@@ -98,8 +154,10 @@ function renderContent(content: unknown, kind: MessageKind) {
     const type = block.type as string;
 
     if (type === "text") {
-      const text = block.text as string;
-      // User text stays plain, assistant text gets markdown
+      const raw = block.text as string;
+      // Clean system tags from user text
+      const text = kind === "user-text" ? extractVisibleText(raw) : raw;
+      if (!text) return null;
       if (kind === "user-text") {
         return (
           <span key={i} className="whitespace-pre-wrap">
