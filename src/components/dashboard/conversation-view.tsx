@@ -308,13 +308,19 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
     fetchConversation();
   }, [fetchConversation]);
 
-  // Auto-scroll to bottom on first load
+  // Auto-scroll conversation to bottom on first load (without moving the page)
   const hasScrolledRef = useRef(false);
   useEffect(() => {
     if (!loading && messages.length > 0 && !hasScrolledRef.current) {
       hasScrolledRef.current = true;
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "instant" });
+        // Find the ScrollArea viewport and scroll IT, not the page
+        const viewport = scrollContainerRef.current?.querySelector(
+          '[data-slot="scroll-area-viewport"]'
+        );
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
       });
     }
   }, [loading, messages.length]);
@@ -335,7 +341,12 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
   }, [loading]);
 
   function scrollToBottom() {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const viewport = scrollContainerRef.current?.querySelector(
+      '[data-slot="scroll-area-viewport"]'
+    );
+    if (viewport) {
+      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+    }
   }
 
   const toolCount = useMemo(
