@@ -1,65 +1,131 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState, useMemo } from "react";
+import { SessionCard } from "@/components/dashboard/session-card";
+import { FilterBar } from "@/components/dashboard/filter-bar";
+import { CommandBar } from "@/components/dashboard/command-bar";
+import type { Session, SessionStatus } from "@/lib/types";
+
+/** Priority order for sorting — lower number = higher priority */
+const STATUS_PRIORITY: Record<SessionStatus, number> = {
+  waiting: 0,
+  active: 1,
+  idle: 2,
+  stale: 3,
+  completed: 4,
+  dead: 5,
+};
+
+export default function DashboardPage() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [filter, setFilter] = useState<"all" | "waiting" | "active">("all");
+  const [error, setError] = useState<string | null>(null);
+
+  // Poll sessions every 3 seconds
+  useEffect(() => {
+    let active = true;
+
+    async function fetchSessions() {
+      try {
+        const res = await fetch("/api/sessions");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (active) {
+          setSessions(data.sessions ?? data ?? []);
+          setError(null);
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch sessions"
+          );
+        }
+      }
+    }
+
+    fetchSessions();
+    const interval = setInterval(fetchSessions, 3000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Filter and sort sessions
+  const filteredSessions = useMemo(() => {
+    let result = sessions;
+
+    if (filter === "waiting") {
+      result = sessions.filter((s) => s.status === "waiting");
+    } else if (filter === "active") {
+      result = sessions.filter((s) => s.status === "active");
+    }
+
+    return [...result].sort((a, b) => {
+      const pa = STATUS_PRIORITY[a.status] ?? 99;
+      const pb = STATUS_PRIORITY[b.status] ?? 99;
+      if (pa !== pb) return pa - pb;
+      // Within same priority, most recent activity first
+      return b.lastActivityAt - a.lastActivityAt;
+    });
+  }, [sessions, filter]);
+
+  const liveCount = sessions.filter(
+    (s) => s.status === "active" || s.status === "waiting" || s.status === "idle"
+  ).length;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex flex-1 flex-col min-h-screen">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-zinc-800/80 bg-zinc-950/90 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold tracking-tight text-zinc-100">
+              Claude Manager
+            </h1>
+            <span className="rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
+              {liveCount} live
+            </span>
+          </div>
+          <FilterBar
+            sessions={sessions}
+            activeFilter={filter}
+            onFilterChange={setFilter}
+          />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+      </header>
+
+      {/* Session list */}
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 pb-24">
+        {error && (
+          <div className="mb-4 rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
+        {filteredSessions.length === 0 && !error ? (
+          <div className="flex flex-col items-center justify-center py-20 text-zinc-600">
+            <p className="text-sm">
+              {filter === "all"
+                ? "No sessions found"
+                : `No ${filter} sessions`}
+            </p>
+            <p className="mt-1 text-xs text-zinc-700">
+              Sessions will appear here when Claude Code is running
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredSessions.map((session) => (
+              <SessionCard key={session.id} session={session} />
+            ))}
+          </div>
+        )}
       </main>
+
+      {/* Command bar */}
+      <CommandBar />
     </div>
   );
 }
