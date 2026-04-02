@@ -138,6 +138,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
   // Open button label + tooltip — different for managed vs unmanaged
   let openLabel: string;
   let openTooltip: string;
+  let openDisabled = false;
 
   if (openState === "loading") {
     openLabel = "Opening...";
@@ -146,15 +147,16 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
     openLabel = "Opened";
     openTooltip = "";
   } else if (!isAlive) {
-    openLabel = "Resume in Terminal";
-    openTooltip = "Resume this session in a new tmux terminal (full control: reply, status detection)";
+    openLabel = "Resume";
+    openTooltip = "Resume this dead session in a new tmux terminal";
   } else if (isManaged) {
-    openLabel = "Switch to Terminal";
-    openTooltip = "Open the terminal window for this session";
+    openLabel = "Open Terminal";
+    openTooltip = "Bring up the terminal window for this tmux session";
   } else {
-    // Alive but unmanaged — explain, don't auto-kill
-    openLabel = "Running in Terminal";
-    openTooltip = "This session is in a regular terminal — limited features. Close it there and click Resume here to get full control (reply, status detection).";
+    // Alive but unmanaged — can't auto-focus, so disable the button
+    openLabel = "In Terminal";
+    openTooltip = "Running in a regular terminal — find it manually. Kill it here and Resume to get full tmux control.";
+    openDisabled = true;
   }
 
   return (
@@ -284,7 +286,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
                 ? "text-emerald-400"
                 : "text-zinc-400 hover:text-zinc-100"
             )}
-            disabled={openState === "loading"}
+            disabled={openState === "loading" || openDisabled}
             title={openTooltip}
             onClick={(e) => {
               e.stopPropagation();
