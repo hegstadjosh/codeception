@@ -317,7 +317,11 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const data = await res.json();
-      setMessages(data.messages ?? []);
+      const incoming = data.messages ?? [];
+      // Never replace existing messages with an empty array — the backend
+      // can temporarily lose track of the JSONL path between discovery cycles,
+      // returning [] even though the conversation exists.
+      setMessages((prev) => incoming.length > 0 || prev.length === 0 ? incoming : prev);
     } catch (err) {
       // Only show error if it's the first load — don't flash errors during polls
       if (!initialLoadDone.current) {
