@@ -15,11 +15,24 @@ import type { Session, SessionStatus, FilterMode, Room, Group } from "@/lib/type
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
-  new: 0,
-  input: 1,
-  working: 2,
+  input: 0,
+  working: 1,
+  new: 2,
   idle: 3,
 };
+
+/** Filter out ghost sessions — stale session files with no real activity */
+function isRealSession(s: Session): boolean {
+  // Sessions with a known project and any activity are always shown
+  if (s.project_name !== "unknown") return true;
+  // "unknown" sessions with tokens or recent activity are kept
+  if (s.token_ratio > 0) return true;
+  if (s.last_activity) return true;
+  // Managed (tmux) sessions are always shown even if brand new
+  if (s.managed) return true;
+  // Everything else is a ghost — stale session file, no conversation, no project
+  return false;
+}
 
 const PINNED_STORAGE_KEY = "claude-manager-pinned";
 
@@ -99,7 +112,7 @@ export default function DashboardPage() {
         if (!sessRes.ok) throw new Error(`HTTP ${sessRes.status}`);
         const data = await sessRes.json();
         if (active) {
-          setSessions(data.sessions ?? []);
+          setSessions((data.sessions ?? []).filter(isRealSession));
           setRooms(data.rooms ?? []);
           setError(null);
           setLastUpdated(new Date());
