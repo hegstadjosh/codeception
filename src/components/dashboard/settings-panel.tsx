@@ -126,6 +126,31 @@ export function SettingsPanel({
 
           <Separator className="bg-zinc-800" />
 
+          {/* Voice */}
+          <section className="flex flex-col gap-3">
+            <SectionHeading>Voice</SectionHeading>
+
+            <SettingRow label="Voice input">
+              <Switch
+                checked={settings.voiceEnabled}
+                onCheckedChange={(val) =>
+                  onSettingsChange({ voiceEnabled: val })
+                }
+              />
+            </SettingRow>
+
+            <SettingRow label="Read responses aloud (TTS)">
+              <Switch
+                checked={settings.ttsEnabled}
+                onCheckedChange={(val) =>
+                  onSettingsChange({ ttsEnabled: val })
+                }
+              />
+            </SettingRow>
+          </section>
+
+          <Separator className="bg-zinc-800" />
+
           {/* About */}
           <section className="flex flex-col gap-3">
             <SectionHeading>About</SectionHeading>

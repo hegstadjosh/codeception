@@ -9,6 +9,7 @@ import { SettingsPanel } from "@/components/dashboard/settings-panel";
 import { NewSessionDialog } from "@/components/dashboard/new-session-dialog";
 import { useNotifications } from "@/lib/use-notifications";
 import { useSettings } from "@/lib/use-settings";
+import { useWebSocket } from "@/lib/use-websocket";
 import type { Session, SessionStatus, FilterMode, Room } from "@/lib/types";
 
 /** Priority order for sorting — lower number = higher priority */
@@ -55,8 +56,17 @@ export default function DashboardPage() {
   const [newSessionOpen, setNewSessionOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [lastUpdatedText, setLastUpdatedText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [settings, updateSettings] = useSettings();
   const fetchCountRef = useRef(0);
+  const fetchSessionsRef = useRef<() => void>(() => {});
+
+  // WebSocket: triggers immediate fetch on session:update events
+  const { connected: wsConnected } = useWebSocket({
+    onUpdate: () => {
+      fetchSessionsRef.current();
+    },
+  });
 
   useNotifications(sessions, settings);
 
@@ -419,7 +429,10 @@ export default function DashboardPage() {
       )}
 
       {/* Command bar */}
-      <CommandBar />
+      <CommandBar
+        voiceEnabled={settings.voiceEnabled}
+        ttsEnabled={settings.ttsEnabled}
+      />
 
       {/* Settings panel */}
       <SettingsPanel

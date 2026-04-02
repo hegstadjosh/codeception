@@ -28,6 +28,9 @@ export interface Session {
   // Backend sends `token_display` ("45k / 1M") and `token_ratio` (0.045)
   token_display: string;
   token_ratio: number;
+  // Raw token counts for cost estimation
+  total_input_tokens: number;
+  total_output_tokens: number;
   last_activity: string | null;  // ISO 8601, can be null
   managed: boolean;
   tmux_session: string | null;
@@ -36,6 +39,7 @@ export interface Session {
     current_task: string;
     overview: string;
   } | null;
+  group_id: string | null;
   messages: ConversationMessage[];  // preview (last 5)
 }
 
@@ -45,18 +49,45 @@ export interface Room {
   sessions: Session[];
 }
 
+/** Custom group from recon serve */
+export interface Group {
+  id: string;
+  name: string;
+  color: string | null;
+  session_ids: string[];
+  sort_order: number;
+}
+
 /** Dashboard filter modes */
-export type FilterMode = "all" | "input" | "working" | "by-project";
+export type FilterMode = "all" | "input" | "working" | "by-project" | "by-group";
 
 /** Settings */
 export interface DashboardSettings {
   pollIntervalMs: number;
   notificationSound: boolean;
   notificationBrowser: boolean;
+  voiceEnabled: boolean;
+  ttsEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: DashboardSettings = {
   pollIntervalMs: 3000,
   notificationSound: true,
   notificationBrowser: true,
+  voiceEnabled: true,
+  ttsEnabled: false,
 };
+
+/** Manager command response from recon */
+export interface ManagerAction {
+  type: "send_message" | "kill" | "focus" | "spawn";
+  session_id?: string;
+  text?: string;
+  cwd?: string;
+  name?: string;
+}
+
+export interface ManagerResponse {
+  text: string;
+  action: ManagerAction | null;
+}
