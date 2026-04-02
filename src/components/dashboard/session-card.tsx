@@ -164,8 +164,10 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
       size="sm"
       className={cn(
         "transition-colors hover:ring-zinc-700/80",
-        // Managed + alive: shimmering green outline — this is a LIVE session you can chat with
-        isManaged && isAlive && "bg-zinc-900/60 shimmer-live",
+        // Managed + active (working/input): shimmering green — something is happening
+        isManaged && isAlive && (session.status === "working" || session.status === "input") && "bg-zinc-900/60 shimmer-live",
+        // Managed + quiet (idle/new): solid green border — live but nothing happening
+        isManaged && isAlive && session.status !== "working" && session.status !== "input" && "bg-zinc-900/60 border border-emerald-500/20",
         // Unmanaged + alive: muted, no shimmer — view-only
         !isManaged && isAlive && "bg-zinc-900/40 ring-zinc-800/60 opacity-90",
         // Dead sessions: most muted
