@@ -22,6 +22,7 @@ interface ConversationViewProps {
   sessionId: string;
   managed: boolean;
   isAlive: boolean;
+  sessionStatus?: string;
 }
 
 // ---------- Time formatting ----------
@@ -182,7 +183,7 @@ function MessageSkeleton() {
 
 // ---------- Reply input ----------
 
-function ReplyInput({ sessionId, managed, isAlive, onSent }: { sessionId: string; managed: boolean; isAlive: boolean; onSent?: () => void }) {
+function ReplyInput({ sessionId, managed, isAlive, onSent, sessionStatus }: { sessionId: string; managed: boolean; isAlive: boolean; onSent?: () => void; sessionStatus?: string }) {
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState("");
@@ -225,10 +226,25 @@ function ReplyInput({ sessionId, managed, isAlive, onSent }: { sessionId: string
         ? "Sent!"
         : "Type a message to send to this session...";
 
+  const showThinking = state === "sending" || (state === "sent" && sessionStatus === "working") || (state === "idle" && sessionStatus === "working");
+
   return (
     <div className="border-t border-zinc-800/50 px-3 py-2 space-y-1">
+      {/* Thinking indicator */}
+      {showThinking && (
+        <div className="flex items-center gap-2 py-1">
+          <div className="flex gap-1">
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="size-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+          <span className="text-xs text-emerald-400/70">
+            {state === "sending" ? "Sending..." : "Claude is working..."}
+          </span>
+        </div>
+      )}
       {/* Routing indicator */}
-      {canReply && (
+      {canReply && !showThinking && (
         <p className="text-[10px] text-zinc-600">
           Message will be typed into the running Claude Code session via tmux
         </p>
@@ -282,7 +298,7 @@ function ReplyInput({ sessionId, managed, isAlive, onSent }: { sessionId: string
 
 // ---------- Main component ----------
 
-export function ConversationView({ sessionId, managed, isAlive }: ConversationViewProps) {
+export function ConversationView({ sessionId, managed, isAlive, sessionStatus }: ConversationViewProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -424,7 +440,7 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
         </div>
         {/* Reply input — critical for new sessions */}
         {managed && isAlive && (
-          <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} />
+          <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} sessionStatus={sessionStatus} />
         )}
         {!managed && isAlive && (
           <div className="border-t border-zinc-800/50 px-3 py-2">
@@ -463,6 +479,18 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
       <div className="relative" ref={scrollContainerRef}>
         <ScrollArea className="h-[400px]">
           <div className="space-y-0.5 pb-3 pt-1">
+            {/* Show hint when tools are hidden and only tool messages exist */}
+            {!showToolIO && displayItems.length === 0 && messages.length > 0 && (
+              <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-600">
+                <span className="text-xs">All {messages.length} messages are tool calls</span>
+                <button
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline transition-colors"
+                  onClick={() => setShowToolIO(true)}
+                >
+                  Show tools to see them
+                </button>
+              </div>
+            )}
             {displayItems.map((item, i) => {
               if (item.type === "hidden") {
                 return <HiddenToolIndicator key={`hidden-${i}`} count={item.count} />;
@@ -513,7 +541,7 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
 
       {/* Reply input — only shown for managed + alive sessions */}
       {managed && isAlive && (
-        <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} />
+        <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} sessionStatus={sessionStatus} />
       )}
       {!managed && isAlive && (
         <div className="border-t border-zinc-800/50 px-3 py-2">

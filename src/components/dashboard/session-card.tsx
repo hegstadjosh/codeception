@@ -447,6 +447,7 @@ export function SessionCard({ session, isPinned = false, isMinimized = false, on
               sessionId={session.session_id}
               managed={isManaged}
               isAlive={isAlive}
+              sessionStatus={session.status}
             />
           </CardContent>
         </>
