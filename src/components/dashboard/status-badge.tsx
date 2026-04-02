@@ -44,10 +44,10 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, managed = true }: StatusBadgeProps) {
   const config = statusConfig[status];
-  const unmanagedSuffix = !managed ? " (terminal)" : "";
-  const unmanagedTooltip = !managed
-    ? ". Running in a regular terminal. Status detection is approximate."
-    : "";
+  const modeSuffix = managed ? " (live)" : " (view-only)";
+  const modeTooltip = managed
+    ? ". You can send messages to this session."
+    : ". Running in a regular terminal — read-only. Kill and Resume to get live control.";
 
   return (
     <span
@@ -55,7 +55,7 @@ export function StatusBadge({ status, managed = true }: StatusBadgeProps) {
         "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
         config.className
       )}
-      title={config.tooltip + unmanagedTooltip}
+      title={config.tooltip + modeTooltip}
     >
       <span className="relative flex h-1.5 w-1.5">
         {config.pulse && (
@@ -73,7 +73,7 @@ export function StatusBadge({ status, managed = true }: StatusBadgeProps) {
           )}
         />
       </span>
-      {config.label}{unmanagedSuffix}
+      {config.label}{modeSuffix}
     </span>
   );
 }
