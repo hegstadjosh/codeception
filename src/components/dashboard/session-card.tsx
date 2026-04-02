@@ -16,6 +16,32 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { Session } from "@/lib/types";
 
+// Consistent color for a slug string (deterministic hash → hue)
+const SLUG_COLORS = [
+  "text-emerald-400", "text-sky-400", "text-violet-400", "text-rose-400",
+  "text-amber-400", "text-teal-400", "text-indigo-400", "text-pink-400",
+  "text-cyan-400", "text-lime-400", "text-fuchsia-400", "text-orange-400",
+];
+
+function slugColor(slug: string): string {
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) hash = ((hash << 5) - hash + slug.charCodeAt(i)) | 0;
+  return SLUG_COLORS[Math.abs(hash) % SLUG_COLORS.length];
+}
+
+/** Extract the random slug from a tmux session name like "BK_Monitor-golden-pony" */
+function parseSessionSlug(tmuxName: string | null, projectName: string): string | null {
+  if (!tmuxName) return null;
+  // The slug is the part after the project prefix
+  const prefix = projectName.replace(/[.:]/g, "-").replace(/ /g, "-");
+  if (tmuxName.startsWith(prefix + "-")) {
+    const rest = tmuxName.slice(prefix.length + 1);
+    // Should be "adjective-noun" format
+    if (rest.includes("-")) return rest.replace(/-/g, " ");
+  }
+  return null;
+}
+
 /** Model-based pricing per million tokens: [input, output] */
 const MODEL_PRICING: Record<string, [number, number]> = {
   "Opus 4.6": [3, 15],
@@ -191,6 +217,14 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
           <CardTitle className="truncate text-sm font-semibold text-zinc-100">
             {session.project_name}
           </CardTitle>
+          {(() => {
+            const slug = parseSessionSlug(session.tmux_session, session.project_name);
+            return slug ? (
+              <span className={cn("text-[11px] font-medium italic", slugColor(slug))}>
+                {slug}
+              </span>
+            ) : null;
+          })()}
           {session.relative_dir && (
             <span className="text-[11px] text-zinc-500">{session.relative_dir}</span>
           )}
