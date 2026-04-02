@@ -337,6 +337,19 @@ export function SessionCard({ session, isPinned = false, isMinimized = false, on
               {estimateCost(session)}
             </span>
           )}
+          {session.chars_since_summary > 0 && (
+            <span
+              className={cn(
+                "text-[10px]",
+                session.chars_since_summary > 10000 ? "text-amber-500" : "text-zinc-500"
+              )}
+              title={`${session.chars_since_summary.toLocaleString()} chars since last summary`}
+            >
+              summary: {session.chars_since_summary >= 1000
+                ? `${(session.chars_since_summary / 1000).toFixed(1)}k`
+                : session.chars_since_summary} chars behind
+            </span>
+          )}
           {!isManaged && (
             <span className="text-[10px] text-zinc-600 italic" title="Running in a regular terminal, not tmux. Some features limited.">
               terminal

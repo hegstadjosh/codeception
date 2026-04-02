@@ -34,6 +34,7 @@ export interface Session {
   last_activity: string | null;  // ISO 8601, can be null
   managed: boolean;
   tmux_session: string | null;
+  chars_since_summary: number;
   summary: {
     latest: string;
     current_task: string;
@@ -56,6 +57,23 @@ export interface Group {
   color: string | null;
   session_ids: string[];
   sort_order: number;
+}
+
+/** Paginated sessions response from recon serve */
+export interface PaginatedSessions {
+  sessions: Session[];
+  rooms: Room[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+/** Paginated messages response from recon serve */
+export interface PaginatedMessages {
+  messages: ConversationMessage[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 /** Dashboard filter modes */

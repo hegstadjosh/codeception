@@ -13,18 +13,15 @@ async function proxyJson(res: Response): Promise<Response> {
   }
 }
 
-export async function GET(
-  request: Request,
+export async function POST(
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   try {
-    const { searchParams } = new URL(request.url);
-    const offset = searchParams.get("offset") || "0";
-    const limit = searchParams.get("limit") || "200";
-
-    const qs = new URLSearchParams({ offset, limit });
-    const res = await fetch(`${RECON}/api/sessions/${id}/messages?${qs}`);
+    const res = await fetch(`${RECON}/api/sessions/${id}/summarize`, {
+      method: "POST",
+    });
     return proxyJson(res);
   } catch {
     return Response.json(

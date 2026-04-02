@@ -304,22 +304,54 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
   const [error, setError] = useState<string | null>(null);
   const [showToolIO, setShowToolIO] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [totalMessages, setTotalMessages] = useState<number | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [allLoaded, setAllLoaded] = useState(false);
 
   const initialLoadDone = useRef(false);
+  const PAGE_SIZE = 100;
 
   const fetchConversation = useCallback(async () => {
     // Only show loading skeleton on first fetch, not on polls
     if (!initialLoadDone.current) setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}`);
+      // First fetch: get total count, then load the last PAGE_SIZE messages
+      // Subsequent polls: fetch the latest PAGE_SIZE from the end
+      const countRes = await fetch(`/api/sessions/${sessionId}?offset=0&limit=0`);
+      if (!countRes.ok) throw new Error(`Failed to fetch: ${countRes.status}`);
+      const countData = await countRes.json();
+      const total = countData.total ?? 0;
+      setTotalMessages(total);
+
+      if (total === 0) {
+        setMessages([]);
+        return;
+      }
+
+      const offset = Math.max(0, total - PAGE_SIZE);
+      const res = await fetch(`/api/sessions/${sessionId}?offset=${offset}&limit=${PAGE_SIZE}`);
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const data = await res.json();
-      const incoming = data.messages ?? [];
+      const incoming: ConversationMessage[] = data.messages ?? [];
+
       // Never replace existing messages with an empty array — the backend
       // can temporarily lose track of the JSONL path between discovery cycles,
       // returning [] even though the conversation exists.
-      setMessages((prev) => incoming.length > 0 || prev.length === 0 ? incoming : prev);
+      setMessages((prev) => {
+        if (incoming.length === 0 && prev.length > 0) return prev;
+        // On polls, only update the tail portion (keep any prepended older messages)
+        if (initialLoadDone.current && prev.length > incoming.length) {
+          // We have older messages prepended — merge by replacing the tail
+          const olderCount = prev.length - (countData.total ?? prev.length) + total;
+          const olderMessages = prev.slice(0, Math.max(0, prev.length - PAGE_SIZE));
+          return [...olderMessages, ...incoming];
+        }
+        return incoming;
+      });
+
+      // If we fetched from offset 0, everything is loaded
+      if (offset === 0) setAllLoaded(true);
     } catch (err) {
       // Only show error if it's the first load — don't flash errors during polls
       if (!initialLoadDone.current) {
@@ -330,6 +362,38 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
       setLoading(false);
     }
   }, [sessionId]);
+
+  // Load older messages when user scrolls to top
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlder || allLoaded || totalMessages === null) return;
+    setLoadingOlder(true);
+    try {
+      // Current messages start at some offset — load the previous page
+      const currentCount = messages.length;
+      const currentOffset = Math.max(0, totalMessages - currentCount);
+      if (currentOffset <= 0) {
+        setAllLoaded(true);
+        setLoadingOlder(false);
+        return;
+      }
+      const newOffset = Math.max(0, currentOffset - PAGE_SIZE);
+      const fetchLimit = currentOffset - newOffset;
+
+      const res = await fetch(`/api/sessions/${sessionId}?offset=${newOffset}&limit=${fetchLimit}`);
+      if (!res.ok) throw new Error(`Failed to fetch older: ${res.status}`);
+      const data = await res.json();
+      const olderMessages: ConversationMessage[] = data.messages ?? [];
+
+      if (olderMessages.length > 0) {
+        setMessages((prev) => [...olderMessages, ...prev]);
+      }
+      if (newOffset === 0) setAllLoaded(true);
+    } catch {
+      // Silently fail — user can scroll up again to retry
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loadingOlder, allLoaded, totalMessages, messages.length, sessionId]);
 
   // Fetch on mount + poll every 3 seconds while expanded
   useEffect(() => {
@@ -408,13 +472,16 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
 
   // ---------- Conversation ----------
   const hiddenLabel = !showToolIO && toolCount > 0 ? ` (${toolCount} hidden)` : "";
+  const totalLabel = totalMessages !== null && totalMessages > messages.length
+    ? ` of ${totalMessages}`
+    : "";
 
   return (
     <div className="flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-800/50">
         <span className="text-[11px] text-zinc-600">
-          {messages.length} messages{hiddenLabel}
+          {messages.length}{totalLabel} messages{hiddenLabel}
         </span>
         <div className="flex items-center gap-2">
           <label htmlFor={`tool-toggle-${sessionId}`} className="text-[11px] text-zinc-500 cursor-pointer select-none">
@@ -449,6 +516,20 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
             initialTopMostItemIndex={displayItems.length - 1}
             followOutput="smooth"
             atBottomStateChange={(atBottom) => setShowJumpToLatest(!atBottom)}
+            startReached={() => { if (!allLoaded && !loadingOlder) loadOlderMessages(); }}
+            components={{
+              Header: () =>
+                loadingOlder ? (
+                  <div className="flex items-center justify-center gap-2 py-2 text-zinc-500 text-xs">
+                    <Loader2 className="size-3 animate-spin" />
+                    Loading older messages...
+                  </div>
+                ) : !allLoaded && totalMessages !== null && messages.length < totalMessages ? (
+                  <div className="flex items-center justify-center py-1.5 text-[11px] text-zinc-600">
+                    Scroll up for older messages
+                  </div>
+                ) : null,
+            }}
             itemContent={(i, item) => {
               if (item.type === "hidden") {
                 return <HiddenToolIndicator count={item.count} />;

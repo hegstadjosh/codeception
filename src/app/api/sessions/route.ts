@@ -13,9 +13,17 @@ async function proxyJson(res: Response): Promise<Response> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const res = await fetch(`${RECON}/api/sessions`);
+    const { searchParams } = new URL(request.url);
+    const page = searchParams.get("page") || "1";
+    const limit = searchParams.get("limit") || "50";
+    const status = searchParams.get("status") || "";
+
+    const params = new URLSearchParams({ page, limit });
+    if (status) params.set("status", status);
+
+    const res = await fetch(`${RECON}/api/sessions?${params}`);
     return proxyJson(res);
   } catch {
     return Response.json(
