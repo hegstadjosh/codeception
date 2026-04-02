@@ -22,12 +22,15 @@ export interface Session {
   room_id: string;
   relative_dir: string | null;
   status: SessionStatus;
-  model: string;
-  tokens: string;           // "45k / 1M"
+  // Backend sends both `model` (raw ID) and `model_display` (human name)
+  model: string | null;
+  model_display: string;
+  // Backend sends `token_display` ("45k / 1M") and `token_ratio` (0.045)
+  token_display: string;
   token_ratio: number;
-  last_activity: string;    // ISO 8601
+  last_activity: string | null;  // ISO 8601, can be null
   managed: boolean;
-  tmux_session: string;
+  tmux_session: string | null;
   summary: {
     latest: string;
     current_task: string;
@@ -36,9 +39,10 @@ export interface Session {
   messages: ConversationMessage[];  // preview (last 5)
 }
 
-/** Rooms mapping from recon serve */
-export interface RoomsMap {
-  [roomId: string]: string[];
+/** Room from recon serve — array of {room_id, sessions} */
+export interface Room {
+  room_id: string;
+  sessions: Session[];
 }
 
 /** Dashboard filter modes */

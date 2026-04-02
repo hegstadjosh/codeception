@@ -16,8 +16,10 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { Session } from "@/lib/types";
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string | null): string {
+  if (!iso) return "—";
   const diffMs = Date.now() - new Date(iso).getTime();
+  if (isNaN(diffMs)) return "—";
   const diffSec = Math.floor(diffMs / 1000);
   if (diffSec < 60) return `${diffSec}s ago`;
   const diffMin = Math.floor(diffSec / 60);
@@ -225,10 +227,10 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             {session.session_id.slice(0, 8)}
           </span>
           <span className="text-[10px] text-zinc-500">
-            {session.model}
+            {session.model_display || "—"}
           </span>
           <span className="font-mono text-[10px] text-zinc-500">
-            {session.tokens}
+            {session.token_display || "—"}
           </span>
           {!isManaged && (
             <span className="text-[10px] text-zinc-600 italic" title="Running in a regular terminal, not tmux. Some features limited.">

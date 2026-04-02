@@ -9,7 +9,7 @@ import { SettingsPanel } from "@/components/dashboard/settings-panel";
 import { NewSessionDialog } from "@/components/dashboard/new-session-dialog";
 import { useNotifications } from "@/lib/use-notifications";
 import { useSettings } from "@/lib/use-settings";
-import type { Session, SessionStatus, FilterMode, RoomsMap } from "@/lib/types";
+import type { Session, SessionStatus, FilterMode, Room } from "@/lib/types";
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
@@ -46,7 +46,7 @@ function timeAgo(date: Date): string {
 
 export default function DashboardPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [rooms, setRooms] = useState<RoomsMap>({});
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +84,7 @@ export default function DashboardPage() {
         const data = await res.json();
         if (active) {
           setSessions(data.sessions ?? []);
-          setRooms(data.rooms ?? {});
+          setRooms(data.rooms ?? []);
           setError(null);
           setLastUpdated(new Date());
           fetchCountRef.current += 1;
@@ -136,7 +136,9 @@ export default function DashboardPage() {
         const pb = STATUS_PRIORITY[b.status] ?? 99;
         if (pa !== pb) return pa - pb;
 
-        return new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime();
+        const aTime = a.last_activity ? new Date(a.last_activity).getTime() : 0;
+        const bTime = b.last_activity ? new Date(b.last_activity).getTime() : 0;
+        return bTime - aTime;
       }),
     [pinnedIds]
   );
@@ -158,26 +160,11 @@ export default function DashboardPage() {
   const projectGroups = useMemo(() => {
     if (filter !== "by-project") return null;
 
-    // Use rooms from the API response
-    const groups: { name: string; sessions: Session[] }[] = [];
-    const sessionMap = new Map(sessions.map((s) => [s.session_id, s]));
-    const assigned = new Set<string>();
-
-    for (const [roomId, sessionIds] of Object.entries(rooms)) {
-      const roomSessions = sessionIds
-        .map((id) => sessionMap.get(id))
-        .filter((s): s is Session => s != null);
-      if (roomSessions.length > 0) {
-        groups.push({ name: roomId, sessions: sortSessions(roomSessions) });
-        sessionIds.forEach((id) => assigned.add(id));
-      }
-    }
-
-    // Any sessions not in a room get their own group
-    const ungrouped = sessions.filter((s) => !assigned.has(s.session_id));
-    if (ungrouped.length > 0) {
-      groups.push({ name: "Ungrouped", sessions: sortSessions(ungrouped) });
-    }
+    // rooms is an array of { room_id, sessions: Session[] } from recon
+    const groups: { name: string; sessions: Session[] }[] = rooms.map((room) => ({
+      name: room.room_id,
+      sessions: sortSessions(room.sessions),
+    }));
 
     // Sort groups: groups with input/working sessions first, then alphabetically
     return groups.sort((a, b) => {
@@ -190,7 +177,7 @@ export default function DashboardPage() {
       if (aHasUrgent !== bHasUrgent) return aHasUrgent ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  }, [sessions, rooms, filter, sortSessions]);
+  }, [rooms, filter, sortSessions]);
 
   const liveCount = sessions.filter(
     (s) => s.status === "working" || s.status === "input" || s.status === "idle"
