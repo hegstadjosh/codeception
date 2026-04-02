@@ -74,7 +74,7 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
   const killTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isManaged = session.managed !== false;
-  const isAlive = session.status === "working" || session.status === "input" || session.status === "new";
+  const isAlive = session.status === "working" || session.status === "input" || session.status === "new" || session.status === "idle";
 
   // One smart "Open" button — knows whether to focus, resume, or upgrade
   const handleOpen = useCallback(async () => {

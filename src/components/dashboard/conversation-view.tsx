@@ -182,7 +182,7 @@ function MessageSkeleton() {
 
 // ---------- Reply input ----------
 
-function ReplyInput({ sessionId, managed, isAlive }: { sessionId: string; managed: boolean; isAlive: boolean }) {
+function ReplyInput({ sessionId, managed, isAlive, onSent }: { sessionId: string; managed: boolean; isAlive: boolean; onSent?: () => void }) {
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState("");
@@ -208,6 +208,8 @@ function ReplyInput({ sessionId, managed, isAlive }: { sessionId: string; manage
       setText("");
       setState("sent");
       setTimeout(() => setState("idle"), 1500);
+      // Trigger conversation refresh after a short delay so the sent message appears
+      setTimeout(() => onSent?.(), 500);
     } catch (e) {
       setState("error");
       setError(e instanceof Error ? e.message : "Send failed");
@@ -289,8 +291,11 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const initialLoadDone = useRef(false);
+
   const fetchConversation = useCallback(async () => {
-    setLoading(true);
+    // Only show loading skeleton on first fetch, not on polls
+    if (!initialLoadDone.current) setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/sessions/${sessionId}`);
@@ -298,31 +303,49 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
       const data = await res.json();
       setMessages(data.messages ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
+      // Only show error if it's the first load — don't flash errors during polls
+      if (!initialLoadDone.current) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+      }
     } finally {
+      initialLoadDone.current = true;
       setLoading(false);
     }
   }, [sessionId]);
 
+  // Fetch on mount + poll every 3 seconds while expanded
   useEffect(() => {
     fetchConversation();
+    const interval = setInterval(fetchConversation, 3000);
+    return () => clearInterval(interval);
   }, [fetchConversation]);
 
-  // Auto-scroll conversation to bottom on first load (without moving the page)
+  // Auto-scroll: on first load, scroll to bottom. On subsequent polls,
+  // only scroll if user is already near the bottom (within 100px).
   const hasScrolledRef = useRef(false);
+  const prevMessageCount = useRef(0);
   useEffect(() => {
-    if (!loading && messages.length > 0 && !hasScrolledRef.current) {
-      hasScrolledRef.current = true;
-      requestAnimationFrame(() => {
-        // Find the ScrollArea viewport and scroll IT, not the page
-        const viewport = scrollContainerRef.current?.querySelector(
-          '[data-slot="scroll-area-viewport"]'
-        );
-        if (viewport) {
+    if (loading || messages.length === 0) return;
+
+    requestAnimationFrame(() => {
+      const viewport = scrollContainerRef.current?.querySelector(
+        '[data-slot="scroll-area-viewport"]'
+      ) as HTMLElement | null;
+      if (!viewport) return;
+
+      if (!hasScrolledRef.current) {
+        // First load — always scroll to bottom
+        hasScrolledRef.current = true;
+        viewport.scrollTop = viewport.scrollHeight;
+      } else if (messages.length > prevMessageCount.current) {
+        // New messages arrived — scroll if user is near the bottom
+        const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+        if (distFromBottom < 100) {
           viewport.scrollTop = viewport.scrollHeight;
         }
-      });
-    }
+      }
+      prevMessageCount.current = messages.length;
+    });
   }, [loading, messages.length]);
 
   // Track scroll for "Jump to latest"
@@ -401,7 +424,7 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
         </div>
         {/* Reply input — critical for new sessions */}
         {managed && isAlive && (
-          <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} />
+          <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} />
         )}
         {!managed && isAlive && (
           <div className="border-t border-zinc-800/50 px-3 py-2">
@@ -490,7 +513,7 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
 
       {/* Reply input — only shown for managed + alive sessions */}
       {managed && isAlive && (
-        <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} />
+        <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} onSent={fetchConversation} />
       )}
       {!managed && isAlive && (
         <div className="border-t border-zinc-800/50 px-3 py-2">
