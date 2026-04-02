@@ -16,6 +16,32 @@ import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import type { Session } from "@/lib/types";
 
+/** Model-based pricing per million tokens: [input, output] */
+const MODEL_PRICING: Record<string, [number, number]> = {
+  "Opus 4.6": [3, 15],
+  "Sonnet 4.6": [1, 5],
+  "Haiku 4.5": [0.25, 1.25],
+};
+
+function estimateCost(session: Session): string | null {
+  const inputTokens = session.total_input_tokens ?? 0;
+  const outputTokens = session.total_output_tokens ?? 0;
+  if (inputTokens === 0 && outputTokens === 0) return null;
+
+  // Match model_display against known pricing — default to Opus
+  let pricing: [number, number] = [3, 15];
+  const display = session.model_display || "";
+  for (const [key, rates] of Object.entries(MODEL_PRICING)) {
+    if (display.includes(key)) {
+      pricing = rates;
+      break;
+    }
+  }
+
+  const cost = (inputTokens * pricing[0] + outputTokens * pricing[1]) / 1_000_000;
+  return `$${cost.toFixed(2)}`;
+}
+
 function relativeTime(iso: string | null): string {
   if (!iso) return "—";
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -232,6 +258,11 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
           <span className="font-mono text-[10px] text-zinc-500">
             {session.token_display || "—"}
           </span>
+          {estimateCost(session) && (
+            <span className="font-mono text-[10px] text-zinc-500" title="Estimated API cost">
+              {estimateCost(session)}
+            </span>
+          )}
           {!isManaged && (
             <span className="text-[10px] text-zinc-600 italic" title="Running in a regular terminal, not tmux. Some features limited.">
               terminal

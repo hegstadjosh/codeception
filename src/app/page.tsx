@@ -112,6 +112,7 @@ export default function DashboardPage() {
       }
     }
 
+    fetchSessionsRef.current = fetchSessions;
     fetchSessions();
     const interval = setInterval(fetchSessions, settings.pollIntervalMs);
 
@@ -153,18 +154,37 @@ export default function DashboardPage() {
     [pinnedIds]
   );
 
-  // Filter and sort sessions
+  // Search helper: case-insensitive substring match across key fields
+  const matchesSearch = useCallback(
+    (s: Session, query: string): boolean => {
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return (
+        s.project_name.toLowerCase().includes(q) ||
+        (s.branch?.toLowerCase().includes(q) ?? false) ||
+        s.session_id.toLowerCase().startsWith(q) ||
+        s.cwd.toLowerCase().includes(q)
+      );
+    },
+    []
+  );
+
+  // Filter and sort sessions (status filter + search, intersected)
   const filteredSessions = useMemo(() => {
     let result = sessions;
 
     if (filter === "input") {
-      result = sessions.filter((s) => s.status === "input");
+      result = result.filter((s) => s.status === "input");
     } else if (filter === "working") {
-      result = sessions.filter((s) => s.status === "working");
+      result = result.filter((s) => s.status === "working");
+    }
+
+    if (searchQuery) {
+      result = result.filter((s) => matchesSearch(s, searchQuery));
     }
 
     return sortSessions(result);
-  }, [sessions, filter, sortSessions]);
+  }, [sessions, filter, searchQuery, sortSessions, matchesSearch]);
 
   // Group sessions by room for "by-project" view
   const projectGroups = useMemo(() => {
@@ -173,8 +193,12 @@ export default function DashboardPage() {
     // rooms is an array of { room_id, sessions: Session[] } from recon
     const groups: { name: string; sessions: Session[] }[] = rooms.map((room) => ({
       name: room.room_id,
-      sessions: sortSessions(room.sessions),
-    }));
+      sessions: sortSessions(
+        searchQuery
+          ? room.sessions.filter((s) => matchesSearch(s, searchQuery))
+          : room.sessions
+      ),
+    })).filter((g) => g.sessions.length > 0); // hide empty groups after search
 
     // Sort groups: groups with input/working sessions first, then alphabetically
     return groups.sort((a, b) => {
@@ -187,7 +211,7 @@ export default function DashboardPage() {
       if (aHasUrgent !== bHasUrgent) return aHasUrgent ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  }, [rooms, filter, sortSessions]);
+  }, [rooms, filter, searchQuery, sortSessions, matchesSearch]);
 
   const liveCount = sessions.filter(
     (s) => s.status === "working" || s.status === "input" || s.status === "idle"
@@ -317,6 +341,11 @@ export default function DashboardPage() {
             <span className="rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
               {liveCount} live
             </span>
+            {/* WebSocket connection indicator */}
+            <span
+              className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-emerald-500" : "bg-red-500"}`}
+              title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
+            />
           </div>
           <div className="flex items-center gap-2">
             <FilterBar
@@ -369,6 +398,60 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* Search bar */}
+      <div className="sticky top-[53px] z-30 border-b border-zinc-800/50 bg-zinc-950/90 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-2">
+          <div className="relative flex-1">
+            {/* Magnifying glass icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search sessions..."
+              className="w-full rounded-md bg-zinc-800 py-1.5 pl-8 pr-8 text-sm text-zinc-200 placeholder:text-zinc-500 outline-none ring-1 ring-zinc-700/50 focus:ring-zinc-600 transition-colors"
+            />
+            {/* Clear button */}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                title="Clear search"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Session list */}
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 pb-24">
