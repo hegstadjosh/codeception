@@ -16,9 +16,10 @@ import { DirectoryBrowser } from "./directory-browser";
 interface NewSessionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCreated?: () => void;
 }
 
-export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) {
+export function NewSessionDialog({ open, onOpenChange, onCreated }: NewSessionDialogProps) {
   const [cwd, setCwd] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +46,12 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) 
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
 
-      // Success — close and reset
+      // Success — close, reset, and trigger immediate refresh
       onOpenChange(false);
       setCwd("");
       setName("");
       setError(null);
+      onCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create session");
     } finally {

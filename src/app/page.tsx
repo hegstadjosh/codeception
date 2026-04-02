@@ -15,10 +15,10 @@ import type { Session, SessionStatus, FilterMode, Room, Group } from "@/lib/type
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
-  input: 0,
-  working: 1,
-  idle: 2,
-  new: 3,
+  new: 0,
+  input: 1,
+  working: 2,
+  idle: 3,
 };
 
 const PINNED_STORAGE_KEY = "claude-manager-pinned";
@@ -614,6 +614,12 @@ export default function DashboardPage() {
       <NewSessionDialog
         open={newSessionOpen}
         onOpenChange={setNewSessionOpen}
+        onCreated={() => {
+          // Immediate fetch so the new session appears at the top right away
+          fetchSessionsRef.current();
+          // Scroll to top where "new" sessions sort
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
       />
 
       {/* Group manager */}

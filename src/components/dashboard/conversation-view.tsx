@@ -389,10 +389,27 @@ export function ConversationView({ sessionId, managed, isAlive }: ConversationVi
   // ---------- Empty ----------
   if (messages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-10 gap-2 text-zinc-500">
-        <MessageSquare className="size-5 text-zinc-600" />
-        <span className="text-sm font-medium">No messages yet</span>
-        <span className="text-xs text-zinc-600">This session hasn&apos;t had any conversation yet</span>
+      <div className="flex flex-col">
+        <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-500">
+          <MessageSquare className="size-5 text-zinc-600" />
+          <span className="text-sm font-medium">No messages yet</span>
+          <span className="text-xs text-zinc-600">
+            {managed && isAlive
+              ? "Type below to send the first message"
+              : "This session hasn\u0027t had any conversation yet"}
+          </span>
+        </div>
+        {/* Reply input — critical for new sessions */}
+        {managed && isAlive && (
+          <ReplyInput sessionId={sessionId} managed={managed} isAlive={isAlive} />
+        )}
+        {!managed && isAlive && (
+          <div className="border-t border-zinc-800/50 px-3 py-2">
+            <p className="text-[11px] text-zinc-600 italic">
+              View only — resume via tmux to enable replies.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
