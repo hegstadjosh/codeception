@@ -7,12 +7,14 @@ interface FilterBarProps {
   sessions: Session[];
   activeFilter: FilterMode;
   onFilterChange: (filter: FilterMode) => void;
+  groupCount?: number;
 }
 
 export function FilterBar({
   sessions,
   activeFilter,
   onFilterChange,
+  groupCount = 0,
 }: FilterBarProps) {
   const inputCount = sessions.filter((s) => s.status === "input").length;
   const workingCount = sessions.filter((s) => s.status === "working").length;
@@ -50,6 +52,12 @@ export function FilterBar({
           By Project
           <span className="ml-1 text-[11px] text-zinc-500">{projectCount}</span>
         </TabsTrigger>
+        {groupCount > 0 && (
+          <TabsTrigger value="by-group" className="data-active:bg-zinc-800">
+            By Group
+            <span className="ml-1 text-[11px] text-zinc-500">{groupCount}</span>
+          </TabsTrigger>
+        )}
       </TabsList>
     </Tabs>
   );

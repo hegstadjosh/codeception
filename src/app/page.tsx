@@ -7,10 +7,11 @@ import { ProjectGroup } from "@/components/dashboard/project-group";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { SettingsPanel } from "@/components/dashboard/settings-panel";
 import { NewSessionDialog } from "@/components/dashboard/new-session-dialog";
+import { GroupManager } from "@/components/dashboard/group-manager";
 import { useNotifications } from "@/lib/use-notifications";
 import { useSettings } from "@/lib/use-settings";
 import { useWebSocket } from "@/lib/use-websocket";
-import type { Session, SessionStatus, FilterMode, Room } from "@/lib/types";
+import type { Session, SessionStatus, FilterMode, Room, Group } from "@/lib/types";
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
@@ -52,8 +53,10 @@ export default function DashboardPage() {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<Group[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newSessionOpen, setNewSessionOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [lastUpdatedText, setLastUpdatedText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,15 +92,22 @@ export default function DashboardPage() {
 
     async function fetchSessions() {
       try {
-        const res = await fetch("/api/sessions");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const [sessRes, groupRes] = await Promise.all([
+          fetch("/api/sessions"),
+          fetch("/api/groups"),
+        ]);
+        if (!sessRes.ok) throw new Error(`HTTP ${sessRes.status}`);
+        const data = await sessRes.json();
         if (active) {
           setSessions(data.sessions ?? []);
           setRooms(data.rooms ?? []);
           setError(null);
           setLastUpdated(new Date());
           fetchCountRef.current += 1;
+        }
+        if (groupRes.ok) {
+          const groupData = await groupRes.json();
+          if (active) setGroups(groupData.groups ?? []);
         }
       } catch (err) {
         if (active) {
@@ -212,6 +222,43 @@ export default function DashboardPage() {
       return a.name.localeCompare(b.name);
     });
   }, [rooms, filter, searchQuery, sortSessions, matchesSearch]);
+
+  // Group sessions by custom group for "by-group" view
+  const customGroups = useMemo(() => {
+    if (filter !== "by-group") return null;
+    const grouped: { name: string; color: string | null; sessions: Session[] }[] = [];
+    const assigned = new Set<string>();
+
+    for (const group of groups) {
+      const groupSessions = sessions.filter((s) =>
+        group.session_ids.includes(s.session_id) &&
+        (!searchQuery || matchesSearch(s, searchQuery))
+      );
+      if (groupSessions.length > 0) {
+        grouped.push({
+          name: group.name,
+          color: group.color,
+          sessions: sortSessions(groupSessions),
+        });
+        groupSessions.forEach((s) => assigned.add(s.session_id));
+      }
+    }
+
+    // Ungrouped sessions
+    const ungrouped = sessions.filter(
+      (s) => !assigned.has(s.session_id) &&
+        (!searchQuery || matchesSearch(s, searchQuery))
+    );
+    if (ungrouped.length > 0) {
+      grouped.push({
+        name: "Ungrouped",
+        color: null,
+        sessions: sortSessions(ungrouped),
+      });
+    }
+
+    return grouped;
+  }, [sessions, groups, filter, searchQuery, sortSessions, matchesSearch]);
 
   const liveCount = sessions.filter(
     (s) => s.status === "working" || s.status === "input" || s.status === "idle"
@@ -352,7 +399,16 @@ export default function DashboardPage() {
               sessions={sessions}
               activeFilter={filter}
               onFilterChange={setFilter}
+              groupCount={groups.length}
             />
+            {/* Groups button */}
+            <button
+              className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+              onClick={() => setGroupsOpen(true)}
+              title="Manage Groups"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+            </button>
             {/* New Session button */}
             <button
               className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
@@ -462,7 +518,36 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {filter === "by-project" && projectGroups ? (
+        {filter === "by-group" && customGroups ? (
+          customGroups.length === 0 ? (
+            <EmptyState message="No sessions in any group" />
+          ) : (
+            <div className="space-y-4">
+              {customGroups.map((group) => (
+                <div
+                  key={group.name}
+                  className="rounded-lg border border-zinc-800/60"
+                  style={group.color ? { borderLeftWidth: 3, borderLeftColor: group.color } : undefined}
+                >
+                  <div className="flex items-center gap-2 px-3 py-2 bg-zinc-900/40 rounded-t-lg">
+                    <span className="text-sm font-medium text-zinc-300">{group.name}</span>
+                    <span className="text-[11px] text-zinc-500">{group.sessions.length}</span>
+                  </div>
+                  <div className="space-y-2 p-2">
+                    {group.sessions.map((session) => (
+                      <SessionCard
+                        key={session.session_id}
+                        session={session}
+                        isPinned={pinnedIds.has(session.session_id)}
+                        onTogglePin={togglePin}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : filter === "by-project" && projectGroups ? (
           projectGroups.length === 0 ? (
             <EmptyState message="No Claude Code sessions detected" />
           ) : (
@@ -529,6 +614,15 @@ export default function DashboardPage() {
       <NewSessionDialog
         open={newSessionOpen}
         onOpenChange={setNewSessionOpen}
+      />
+
+      {/* Group manager */}
+      <GroupManager
+        open={groupsOpen}
+        onOpenChange={setGroupsOpen}
+        groups={groups}
+        sessions={sessions}
+        onGroupsChanged={() => fetchSessionsRef.current()}
       />
     </div>
   );
