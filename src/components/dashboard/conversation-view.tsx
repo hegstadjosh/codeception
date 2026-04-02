@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -304,8 +304,6 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
   const [error, setError] = useState<string | null>(null);
   const [showToolIO, setShowToolIO] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const initialLoadDone = useRef(false);
 
@@ -340,57 +338,8 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
     return () => clearInterval(interval);
   }, [fetchConversation]);
 
-  // Auto-scroll: on first load, scroll to bottom. On subsequent polls,
-  // only scroll if user is already near the bottom (within 100px).
-  const hasScrolledRef = useRef(false);
-  const prevMessageCount = useRef(0);
-  useEffect(() => {
-    if (loading || messages.length === 0) return;
-
-    requestAnimationFrame(() => {
-      const viewport = scrollContainerRef.current?.querySelector(
-        '[data-slot="scroll-area-viewport"]'
-      ) as HTMLElement | null;
-      if (!viewport) return;
-
-      if (!hasScrolledRef.current) {
-        // First load — always scroll to bottom
-        hasScrolledRef.current = true;
-        viewport.scrollTop = viewport.scrollHeight;
-      } else if (messages.length > prevMessageCount.current) {
-        // New messages arrived — scroll if user is near the bottom
-        const distFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
-        if (distFromBottom < 100) {
-          viewport.scrollTop = viewport.scrollHeight;
-        }
-      }
-      prevMessageCount.current = messages.length;
-    });
-  }, [loading, messages.length]);
-
-  // Track scroll for "Jump to latest"
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]');
-    if (!viewport) return;
-    function handleScroll() {
-      const el = viewport as HTMLElement;
-      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-      setShowJumpToLatest(distFromBottom > 200);
-    }
-    viewport.addEventListener("scroll", handleScroll, { passive: true });
-    return () => viewport.removeEventListener("scroll", handleScroll);
-  }, [loading]);
-
-  function scrollToBottom() {
-    const viewport = scrollContainerRef.current?.querySelector(
-      '[data-slot="scroll-area-viewport"]'
-    );
-    if (viewport) {
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-    }
-  }
+  // Virtuoso handles auto-scroll natively via followOutput + atBottomStateChange
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
 
   const toolCount = useMemo(
     () => messages.filter((m) => m.kind === "tool_call" || m.kind === "tool_result" || m.kind === "thinking").length,
@@ -479,32 +428,36 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
         </div>
       </div>
 
-      {/* Messages — fixed max height so card doesn't grow unbounded */}
-      <div className="relative" ref={scrollContainerRef}>
-        <ScrollArea className="h-[400px]">
-          <div className="space-y-0.5 pb-3 pt-1">
-            {/* Show hint when tools are hidden and only tool messages exist */}
-            {!showToolIO && displayItems.length === 0 && messages.length > 0 && (
-              <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-600">
-                <span className="text-xs">All {messages.length} messages are tool calls</span>
-                <button
-                  className="text-xs text-zinc-500 hover:text-zinc-300 underline transition-colors"
-                  onClick={() => setShowToolIO(true)}
-                >
-                  Show tools to see them
-                </button>
-              </div>
-            )}
-            {displayItems.map((item, i) => {
+      {/* Messages — virtualized for performance */}
+      <div className="relative">
+        {/* Show hint when tools are hidden and only tool messages exist */}
+        {!showToolIO && displayItems.length === 0 && messages.length > 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2 text-zinc-600 h-[400px]">
+            <span className="text-xs">All {messages.length} messages are tool calls</span>
+            <button
+              className="text-xs text-zinc-500 hover:text-zinc-300 underline transition-colors"
+              onClick={() => setShowToolIO(true)}
+            >
+              Show tools to see them
+            </button>
+          </div>
+        ) : (
+          <Virtuoso
+            ref={virtuosoRef}
+            style={{ height: 400 }}
+            data={displayItems}
+            initialTopMostItemIndex={displayItems.length - 1}
+            followOutput="smooth"
+            atBottomStateChange={(atBottom) => setShowJumpToLatest(!atBottom)}
+            itemContent={(i, item) => {
               if (item.type === "hidden") {
-                return <HiddenToolIndicator key={`hidden-${i}`} count={item.count} />;
+                return <HiddenToolIndicator count={item.count} />;
               }
               const msg = item.msg;
               const config = KIND_CONFIG[msg.kind];
               const isCompact = msg.kind === "tool_call" || msg.kind === "tool_result";
               return (
                 <div
-                  key={`${msg.timestamp}-${i}`}
                   className={cn(
                     "group flex gap-2 px-3 rounded-sm mx-1",
                     isCompact ? "py-0.5" : "py-1.5",
@@ -522,10 +475,9 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
                   </span>
                 </div>
               );
-            })}
-            <div ref={bottomRef} />
-          </div>
-        </ScrollArea>
+            }}
+          />
+        )}
 
         {/* Jump to latest */}
         {showJumpToLatest && (
@@ -533,7 +485,7 @@ export function ConversationView({ sessionId, managed, isAlive, sessionStatus }:
             <Button
               variant="secondary"
               size="xs"
-              onClick={scrollToBottom}
+              onClick={() => virtuosoRef.current?.scrollToIndex({ index: displayItems.length - 1, behavior: "smooth" })}
               className="shadow-lg shadow-black/40 gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
             >
               <ArrowDown className="size-3" />
