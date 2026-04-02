@@ -9,14 +9,18 @@ interface ProjectGroupProps {
   projectName: string;
   sessions: Session[];
   pinnedIds: Set<string>;
+  minimizedIds: Set<string>;
   onTogglePin: (id: string) => void;
+  onToggleMinimize: (id: string) => void;
 }
 
 export function ProjectGroup({
   projectName,
   sessions,
   pinnedIds,
+  minimizedIds,
   onTogglePin,
+  onToggleMinimize,
 }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
 
@@ -51,7 +55,9 @@ export function ProjectGroup({
               key={session.session_id}
               session={session}
               isPinned={pinnedIds.has(session.session_id)}
+              isMinimized={minimizedIds.has(session.session_id)}
               onTogglePin={onTogglePin}
+              onToggleMinimize={onToggleMinimize}
             />
           ))}
         </div>

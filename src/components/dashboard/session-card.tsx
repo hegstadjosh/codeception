@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "./status-badge";
 import { ConversationView } from "./conversation-view";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, X, EyeOff, Eye } from "lucide-react";
 import type { Session } from "@/lib/types";
 
 // Consistent color for a slug string (deterministic hash → hue)
@@ -87,10 +87,12 @@ type ActionState = "idle" | "loading" | "success" | "error";
 interface SessionCardProps {
   session: Session;
   isPinned?: boolean;
+  isMinimized?: boolean;
   onTogglePin?: (id: string) => void;
+  onToggleMinimize?: (id: string) => void;
 }
 
-export function SessionCard({ session, isPinned = false, onTogglePin }: SessionCardProps) {
+export function SessionCard({ session, isPinned = false, isMinimized = false, onTogglePin, onToggleMinimize }: SessionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [confirmKill, setConfirmKill] = useState(false);
   const [killState, setKillState] = useState<ActionState>("idle");
@@ -185,6 +187,33 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
     openDisabled = true;
   }
 
+  // Minimized: thin row with just name + status dot + restore button
+  if (isMinimized) {
+    const slug = parseSessionSlug(session.tmux_session, session.project_name);
+    return (
+      <div
+        className="flex items-center gap-2 rounded-md border border-zinc-800/40 bg-zinc-950/40 px-3 py-1.5 cursor-pointer hover:bg-zinc-900/40 transition-colors group"
+        onClick={() => onToggleMinimize?.(session.session_id)}
+        title="Click to restore"
+      >
+        <Eye className="size-3 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" />
+        <span className="text-xs font-medium text-zinc-400 truncate">
+          {session.project_name}
+        </span>
+        {slug && (
+          <span className={cn("text-[10px] italic", slugColor(slug))}>
+            {slug}
+          </span>
+        )}
+        <span className={cn(
+          "size-1.5 rounded-full shrink-0",
+          session.status === "working" || session.status === "input" ? "bg-emerald-400" : "bg-zinc-600"
+        )} />
+        <span className="text-[10px] text-zinc-600">{session.status}</span>
+      </div>
+    );
+  }
+
   return (
     <Card
       size="sm"
@@ -229,11 +258,6 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
             <span className="text-[11px] text-zinc-500">{session.relative_dir}</span>
           )}
           <StatusBadge status={session.status} managed={isManaged} />
-          {!isManaged && isAlive && (
-            <span className="text-[11px] text-zinc-500" title="Running in a regular terminal, not managed via tmux">
-              &#x1f441;
-            </span>
-          )}
           {session.branch && (
             <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
               {session.branch}
@@ -241,6 +265,18 @@ export function SessionCard({ session, isPinned = false, onTogglePin }: SessionC
           )}
         </div>
         <CardAction>
+          {onToggleMinimize && (
+            <button
+              className="text-zinc-600 hover:text-zinc-400 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMinimize(session.session_id);
+              }}
+              title="Minimize session"
+            >
+              <EyeOff className="size-3.5" />
+            </button>
+          )}
           {onTogglePin && (
             <button
               className={cn(

@@ -35,6 +35,7 @@ function isRealSession(s: Session): boolean {
 }
 
 const PINNED_STORAGE_KEY = "claude-manager-pinned";
+const MINIMIZED_STORAGE_KEY = "claude-manager-minimized";
 
 function loadPinnedIds(): Set<string> {
   try {
@@ -48,6 +49,18 @@ function loadPinnedIds(): Set<string> {
 
 function savePinnedIds(ids: Set<string>) {
   localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify([...ids]));
+}
+
+function loadMinimizedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(MINIMIZED_STORAGE_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch { /* ignore */ }
+  return new Set();
+}
+
+function saveMinimizedIds(ids: Set<string>) {
+  localStorage.setItem(MINIMIZED_STORAGE_KEY, JSON.stringify([...ids]));
 }
 
 function timeAgo(date: Date): string {
@@ -64,6 +77,7 @@ export default function DashboardPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => loadPinnedIds());
+  const [minimizedIds, setMinimizedIds] = useState<Set<string>>(() => loadMinimizedIds());
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -95,6 +109,19 @@ export default function DashboardPage() {
         next.add(id);
       }
       savePinnedIds(next);
+      return next;
+    });
+  }, []);
+
+  const toggleMinimize = useCallback((id: string) => {
+    setMinimizedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      saveMinimizedIds(next);
       return next;
     });
   }, []);
@@ -552,7 +579,9 @@ export default function DashboardPage() {
                         key={session.session_id}
                         session={session}
                         isPinned={pinnedIds.has(session.session_id)}
+                        isMinimized={minimizedIds.has(session.session_id)}
                         onTogglePin={togglePin}
+                        onToggleMinimize={toggleMinimize}
                       />
                     ))}
                   </div>
@@ -571,7 +600,9 @@ export default function DashboardPage() {
                   projectName={group.name}
                   sessions={group.sessions}
                   pinnedIds={pinnedIds}
+                  minimizedIds={minimizedIds}
                   onTogglePin={togglePin}
+                  onToggleMinimize={toggleMinimize}
                 />
               ))}
             </div>
@@ -591,7 +622,9 @@ export default function DashboardPage() {
                 key={session.session_id}
                 session={session}
                 isPinned={pinnedIds.has(session.session_id)}
+                isMinimized={minimizedIds.has(session.session_id)}
                 onTogglePin={togglePin}
+                onToggleMinimize={toggleMinimize}
               />
             ))}
           </div>
