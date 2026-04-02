@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { DirectoryBrowser } from "./directory-browser";
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -18,7 +19,7 @@ interface NewSessionDialogProps {
 }
 
 export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) {
-  const [cwd, setCwd] = useState("~/");
+  const [cwd, setCwd] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) 
 
       // Success — close and reset
       onOpenChange(false);
-      setCwd("~/");
+      setCwd("");
       setName("");
       setError(null);
     } catch (err) {
@@ -60,30 +61,24 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) 
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="overflow-y-auto bg-zinc-950 border-zinc-800"
+        className="overflow-y-auto bg-zinc-950 border-zinc-800 w-full sm:max-w-lg"
       >
         <SheetHeader>
           <SheetTitle className="text-zinc-100">New Session</SheetTitle>
           <SheetDescription className="text-zinc-500">
-            Launch a new Claude Code session
+            Browse to a project directory, then launch Claude Code
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-5 px-4 pb-6">
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4 px-4 pb-6">
+          {/* Directory browser */}
+          <div className="flex flex-col gap-1.5">
             <Label className="text-sm text-zinc-300">Project directory</Label>
-            <Input
-              value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
-              placeholder="~/projects/my-app"
-              className="bg-zinc-900 border-zinc-700 text-zinc-200 font-mono text-sm"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-              }}
-            />
+            <DirectoryBrowser value="~" onChange={setCwd} />
           </div>
 
-          <div className="flex flex-col gap-2">
+          {/* Session name */}
+          <div className="flex flex-col gap-1.5">
             <Label className="text-sm text-zinc-300">
               Session name{" "}
               <span className="text-zinc-600 font-normal">(optional)</span>
@@ -116,7 +111,7 @@ export function NewSessionDialog({ open, onOpenChange }: NewSessionDialogProps) 
                 Creating...
               </span>
             ) : (
-              "Create"
+              "Create Session Here"
             )}
           </Button>
         </div>
