@@ -13,15 +13,13 @@ async function proxyJson(res: Response): Promise<Response> {
   }
 }
 
-/** Legacy endpoint — relays to /api/manager/message (the new tmux-based path) */
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
-    const body = await request.json();
-    const res = await fetch(`${RECON}/api/manager/message`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const { searchParams } = new URL(request.url);
+    const limit = searchParams.get("limit") || "20";
+    const params = new URLSearchParams({ limit });
+
+    const res = await fetch(`${RECON}/api/manager/messages?${params}`);
     return proxyJson(res);
   } catch {
     return Response.json(

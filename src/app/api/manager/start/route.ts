@@ -13,14 +13,11 @@ async function proxyJson(res: Response): Promise<Response> {
   }
 }
 
-/** Legacy endpoint — relays to /api/manager/message (the new tmux-based path) */
-export async function POST(request: Request) {
+export async function POST() {
   try {
-    const body = await request.json();
-    const res = await fetch(`${RECON}/api/manager/message`, {
+    const res = await fetch(`${RECON}/api/manager/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
     });
     return proxyJson(res);
   } catch {
