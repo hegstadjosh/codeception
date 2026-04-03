@@ -20,12 +20,12 @@
     "lint": "eslint"
   },
   "files": [
-    "bin/",
+    "bin/claude-manager.js",
     "scripts/postinstall.js",
     ".next/standalone/",
     ".next/static/",
     "public/",
-    "server/manager/"
+    "server/manager/CLAUDE.md"
   ],
   "engines": {
     "node": ">=20"
