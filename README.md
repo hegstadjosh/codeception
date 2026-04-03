@@ -71,6 +71,6 @@ Release workflow:
 
 ## Support
 
-If Claude Manager saves you time and you want to support development, tips are appreciated.
+If you like it, pay me :)
 
 Venmo: `@josh-hegstad`
