@@ -78,19 +78,31 @@ export function NewSessionDialog({ open, onOpenChange, onCreated }: NewSessionDi
       setError(null);
       onCreated?.();
 
-      // If an initial prompt was provided, send it after a delay to let Claude boot
-      if (promptText && result.session_id) {
+      // If an initial prompt was provided, send it after a delay to let Claude boot.
+      // The create response returns session_name (tmux name), not session_id.
+      // We poll /api/sessions to find the session by its tmux name, then send the prompt.
+      if (promptText && result.session_name) {
+        const tmuxName = result.session_name;
         setTimeout(async () => {
           try {
-            await fetch(`/api/sessions/${result.session_id}/reply`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ text: promptText }),
-            });
+            const sessRes = await fetch("/api/sessions");
+            if (sessRes.ok) {
+              const sessData = await sessRes.json();
+              const sess = (sessData.sessions ?? []).find(
+                (s: { tmux_session: string | null }) => s.tmux_session === tmuxName
+              );
+              if (sess?.session_id) {
+                await fetch(`/api/sessions/${sess.session_id}/reply`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ text: promptText }),
+                });
+              }
+            }
           } catch {
             // Best-effort — session may not be ready yet
           }
-        }, 3000);
+        }, 4000);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create session");
