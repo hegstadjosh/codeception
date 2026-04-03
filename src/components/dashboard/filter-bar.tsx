@@ -1,6 +1,7 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { History } from "lucide-react";
 import type { Session, FilterMode } from "@/lib/types";
 
 interface FilterBarProps {
@@ -58,6 +59,10 @@ export function FilterBar({
             <span className="ml-1 text-[11px] text-zinc-500">{groupCount}</span>
           </TabsTrigger>
         )}
+        <TabsTrigger value="history" className="data-active:bg-zinc-800">
+          <History className="size-3 mr-1" />
+          History
+        </TabsTrigger>
       </TabsList>
     </Tabs>
   );

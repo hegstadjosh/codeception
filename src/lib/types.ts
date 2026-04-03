@@ -33,6 +33,7 @@ export interface Session {
   total_output_tokens: number;
   last_activity: string | null;  // ISO 8601, can be null
   managed: boolean;
+  is_manager: boolean;
   tmux_session: string | null;
   chars_since_summary: number;
   summary: {
@@ -42,6 +43,8 @@ export interface Session {
   } | null;
   group_id: string | null;
   messages: ConversationMessage[];  // preview (last 5)
+  display_name?: string;
+  user_note?: string;
 }
 
 /** Room from recon serve — array of {room_id, sessions} */
@@ -77,7 +80,7 @@ export interface PaginatedMessages {
 }
 
 /** Dashboard filter modes */
-export type FilterMode = "all" | "input" | "working" | "by-project" | "by-group";
+export type FilterMode = "all" | "input" | "working" | "by-project" | "by-group" | "history";
 
 /** Settings */
 export interface DashboardSettings {
@@ -95,6 +98,17 @@ export const DEFAULT_SETTINGS: DashboardSettings = {
   voiceEnabled: true,
   ttsEnabled: false,
 };
+
+/** Resumable session from recon serve GET /api/sessions/resumable */
+export interface ResumableSession {
+  session_id: string;
+  cwd: string;
+  branch: string | null;
+  model: string | null;
+  tokens: string | null;
+  last_active: string | null;
+  project_name?: string;
+}
 
 /** Manager command response from recon */
 export interface ManagerAction {

@@ -4,14 +4,13 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { SessionCard } from "@/components/dashboard/session-card";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { ProjectGroup } from "@/components/dashboard/project-group";
-import { CommandBar } from "@/components/dashboard/command-bar";
 import { SettingsPanel } from "@/components/dashboard/settings-panel";
 import { NewSessionDialog } from "@/components/dashboard/new-session-dialog";
 import { GroupManager } from "@/components/dashboard/group-manager";
 import { useNotifications } from "@/lib/use-notifications";
 import { useSettings } from "@/lib/use-settings";
 import { useWebSocket } from "@/lib/use-websocket";
-import type { Session, SessionStatus, FilterMode, Room, Group } from "@/lib/types";
+import type { Session, SessionStatus, FilterMode, Room, Group, ResumableSession } from "@/lib/types";
 
 /** Priority order for sorting — lower number = higher priority */
 const STATUS_PRIORITY: Record<SessionStatus, number> = {
@@ -23,6 +22,8 @@ const STATUS_PRIORITY: Record<SessionStatus, number> = {
 
 /** Filter out ghost sessions — stale session files with no real activity */
 function isRealSession(s: Session): boolean {
+  // Manager is always shown
+  if (s.is_manager) return true;
   // Sessions with a known project and any activity are always shown
   if (s.project_name !== "unknown") return true;
   // "unknown" sessions with tokens or recent activity are kept
@@ -72,6 +73,78 @@ function timeAgo(date: Date): string {
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
+/** Card for resumable sessions in the History tab */
+function ResumableCard({ session, onResumed }: { session: ResumableSession; onResumed: () => void }) {
+  const [resuming, setResuming] = useState(false);
+  const [error, setError] = useState("");
+
+  const projectName = session.project_name || session.cwd.split("/").pop() || session.cwd;
+
+  function relTime(iso: string | null): string {
+    if (!iso) return "unknown";
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (isNaN(diffMs)) return "unknown";
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return `${diffSec}s ago`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDay = Math.floor(diffHr / 24);
+    return `${diffDay}d ago`;
+  }
+
+  async function handleResume() {
+    setResuming(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/sessions/${session.session_id}/resume`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Resume failed" }));
+        throw new Error(data.error || `Resume failed (${res.status})`);
+      }
+      onResumed();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Resume failed");
+      setResuming(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-zinc-800/60 bg-zinc-950/60 px-4 py-3 opacity-80 hover:opacity-100 transition-opacity">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-sm font-medium text-zinc-300 truncate">{projectName}</span>
+          {session.branch && (
+            <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-zinc-400">
+              {session.branch}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-[11px] text-zinc-500">{session.model || ""}</span>
+          {session.tokens && (
+            <span className="font-mono text-[11px] text-zinc-500">{session.tokens}</span>
+          )}
+          <span className="font-mono text-[11px] text-zinc-500">{relTime(session.last_active)}</span>
+          <button
+            className="rounded-md bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+            disabled={resuming}
+            onClick={handleResume}
+          >
+            {resuming ? "Resuming..." : "Resume"}
+          </button>
+        </div>
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="font-mono text-[10px] text-zinc-600 truncate">{session.cwd}</span>
+        <span className="font-mono text-[10px] text-zinc-600">{session.session_id.slice(0, 8)}</span>
+      </div>
+      {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -88,6 +161,13 @@ export default function DashboardPage() {
   const [lastUpdatedText, setLastUpdatedText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [settings, updateSettings] = useSettings();
+  const [hasGeminiKey, setHasGeminiKey] = useState(true); // assume true until checked
+  const [resumableSessions, setResumableSessions] = useState<ResumableSession[]>([]);
+  const [resumableLoading, setResumableLoading] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkConfirm, setBulkConfirm] = useState<"kill" | "summarize" | null>(null);
   const fetchCountRef = useRef(0);
   const fetchSessionsRef = useRef<() => void>(() => {});
 
@@ -126,15 +206,71 @@ export default function DashboardPage() {
     });
   }, []);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBulkKill = useCallback(async () => {
+    if (!bulkConfirm) {
+      setBulkConfirm("kill");
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(
+        [...selectedIds].map((id) =>
+          fetch(`/api/sessions/${id}/kill`, { method: "POST" })
+        )
+      );
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      setBulkConfirm(null);
+      fetchSessionsRef.current();
+    } catch {
+      // ignore individual failures
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }, [selectedIds, bulkConfirm]);
+
+  const handleBulkSummarize = useCallback(async () => {
+    if (!bulkConfirm) {
+      setBulkConfirm("summarize");
+      return;
+    }
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(
+        [...selectedIds].map((id) =>
+          fetch(`/api/sessions/${id}/summarize`, { method: "POST" })
+        )
+      );
+      setBulkConfirm(null);
+      setSelectedIds(new Set());
+      setSelectMode(false);
+      fetchSessionsRef.current();
+    } catch {
+      // ignore individual failures
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }, [selectedIds, bulkConfirm]);
+
   // Poll sessions every N seconds
   useEffect(() => {
     let active = true;
 
     async function fetchSessions() {
       try {
-        const [sessRes, groupRes] = await Promise.all([
+        const [sessRes, groupRes, configRes] = await Promise.all([
           fetch("/api/sessions"),
           fetch("/api/groups"),
+          fetch("/api/config"),
         ]);
         if (!sessRes.ok) throw new Error(`HTTP ${sessRes.status}`);
         const data = await sessRes.json();
@@ -148,6 +284,10 @@ export default function DashboardPage() {
         if (groupRes.ok) {
           const groupData = await groupRes.json();
           if (active) setGroups(groupData.groups ?? []);
+        }
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          if (active) setHasGeminiKey(configData.has_gemini_key ?? false);
         }
       } catch (err) {
         if (active) {
@@ -172,6 +312,33 @@ export default function DashboardPage() {
     };
   }, [settings.pollIntervalMs]);
 
+  // Fetch resumable sessions when history tab is active
+  useEffect(() => {
+    if (filter !== "history") return;
+    let active = true;
+    async function fetchResumable() {
+      setResumableLoading(true);
+      try {
+        const res = await fetch("/api/sessions/resumable");
+        if (res.ok) {
+          const data = await res.json();
+          if (active) setResumableSessions(data.sessions ?? []);
+        }
+      } catch {
+        // ignore — will show empty
+      } finally {
+        if (active) setResumableLoading(false);
+      }
+    }
+    fetchResumable();
+    return () => { active = false; };
+  }, [filter]);
+
+  // Clear selection when leaving select mode
+  useEffect(() => {
+    if (!selectMode) setSelectedIds(new Set());
+  }, [selectMode]);
+
   // Update "last updated" text every second
   useEffect(() => {
     if (!lastUpdated) return;
@@ -185,10 +352,15 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [lastUpdated]);
 
-  // Sort helper: pinned first, then by status priority, then by last activity
+  // Sort helper: manager first, then pinned, then by status priority, then by last activity
   const sortSessions = useCallback(
     (list: Session[]) =>
       [...list].sort((a, b) => {
+        // Manager always on top
+        const aManager = a.is_manager ? 0 : 1;
+        const bManager = b.is_manager ? 0 : 1;
+        if (aManager !== bManager) return aManager - bManager;
+
         const aPinned = pinnedIds.has(a.session_id) ? 0 : 1;
         const bPinned = pinnedIds.has(b.session_id) ? 0 : 1;
         if (aPinned !== bPinned) return aPinned - bPinned;
@@ -213,24 +385,29 @@ export default function DashboardPage() {
         s.project_name.toLowerCase().includes(q) ||
         (s.branch?.toLowerCase().includes(q) ?? false) ||
         s.session_id.toLowerCase().startsWith(q) ||
-        s.cwd.toLowerCase().includes(q)
+        s.cwd.toLowerCase().includes(q) ||
+        (s.summary?.current_task?.toLowerCase().includes(q) ?? false) ||
+        (s.summary?.overview?.toLowerCase().includes(q) ?? false) ||
+        (s.display_name?.toLowerCase().includes(q) ?? false) ||
+        (s.user_note?.toLowerCase().includes(q) ?? false)
       );
     },
     []
   );
 
   // Filter and sort sessions (status filter + search, intersected)
+  // Manager always appears regardless of filter
   const filteredSessions = useMemo(() => {
     let result = sessions;
 
     if (filter === "input") {
-      result = result.filter((s) => s.status === "input");
+      result = result.filter((s) => s.is_manager || s.status === "input");
     } else if (filter === "working") {
-      result = result.filter((s) => s.status === "working");
+      result = result.filter((s) => s.is_manager || s.status === "working");
     }
 
     if (searchQuery) {
-      result = result.filter((s) => matchesSearch(s, searchQuery));
+      result = result.filter((s) => s.is_manager || matchesSearch(s, searchQuery));
     }
 
     return sortSessions(result);
@@ -303,6 +480,8 @@ export default function DashboardPage() {
   const liveCount = sessions.filter(
     (s) => s.status === "working" || s.status === "input" || s.status === "idle"
   ).length;
+
+  const hasManager = sessions.some((s) => s.is_manager);
 
   // --- Loading state ---
   if (loading) {
@@ -433,6 +612,15 @@ export default function DashboardPage() {
               className={`inline-block h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-emerald-500" : "bg-red-500"}`}
               title={wsConnected ? "WebSocket connected" : "WebSocket disconnected"}
             />
+            {/* Manager status indicator */}
+            {!loading && (
+              <span
+                className={`text-[11px] ${hasManager ? "text-violet-400" : "text-zinc-600"}`}
+                title={hasManager ? "Manager running" : "Manager not running"}
+              >
+                {hasManager ? "mgr" : "no mgr"}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <FilterBar
@@ -441,6 +629,23 @@ export default function DashboardPage() {
               onFilterChange={setFilter}
               groupCount={groups.length}
             />
+            {/* Select mode toggle */}
+            {filter !== "history" && (
+              <button
+                className={`rounded-md p-1.5 transition-colors ${
+                  selectMode
+                    ? "bg-violet-500/20 text-violet-400 hover:bg-violet-500/30"
+                    : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
+                }`}
+                onClick={() => {
+                  setSelectMode((v) => !v);
+                  setBulkConfirm(null);
+                }}
+                title={selectMode ? "Exit select mode" : "Select multiple sessions"}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></svg>
+              </button>
+            )}
             {/* Groups button */}
             <button
               className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
@@ -550,7 +755,22 @@ export default function DashboardPage() {
       </div>
 
       {/* Session list */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4 pb-24">
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-4">
+        {/* Gemini API key banner */}
+        {!hasGeminiKey && !loading && (
+          <div className="mb-4 rounded-md border border-amber-900/50 bg-amber-950/30 px-3 py-2 flex items-center justify-between">
+            <span className="text-sm text-amber-400">
+              Gemini API key not set — summaries won&apos;t work.
+            </span>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="text-xs text-amber-300 hover:text-amber-200 underline shrink-0 ml-3"
+            >
+              Add in Settings
+            </button>
+          </div>
+        )}
+
         {/* Non-fatal error banner (recon was up but had a blip) */}
         {error && sessions.length > 0 && (
           <div className="mb-4 rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-400">
@@ -558,7 +778,91 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {filter === "by-group" && customGroups ? (
+        {/* Floating bulk action bar */}
+        {selectMode && selectedIds.size > 0 && (
+          <div className="sticky top-[97px] z-20 mb-3 flex items-center gap-2 rounded-lg border border-zinc-700/60 bg-zinc-900/95 px-3 py-2 backdrop-blur-sm">
+            <span className="text-sm text-zinc-300 font-medium">
+              {selectedIds.size} selected
+            </span>
+            <div className="flex-1" />
+            {bulkConfirm === "summarize" ? (
+              <button
+                className="rounded-md bg-violet-600 px-3 py-1 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+                disabled={bulkActionLoading}
+                onClick={handleBulkSummarize}
+              >
+                {bulkActionLoading ? "Summarizing..." : `Confirm Summarize ${selectedIds.size}`}
+              </button>
+            ) : (
+              <button
+                className="rounded-md bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700"
+                disabled={bulkActionLoading}
+                onClick={() => { setBulkConfirm(null); handleBulkSummarize(); }}
+              >
+                Summarize All
+              </button>
+            )}
+            {bulkConfirm === "kill" ? (
+              <button
+                className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                disabled={bulkActionLoading}
+                onClick={handleBulkKill}
+              >
+                {bulkActionLoading ? "Killing..." : `Confirm Kill ${selectedIds.size}`}
+              </button>
+            ) : (
+              <button
+                className="rounded-md bg-zinc-800 px-3 py-1 text-xs font-medium text-red-400 hover:bg-red-950/40"
+                disabled={bulkActionLoading}
+                onClick={() => { setBulkConfirm(null); handleBulkKill(); }}
+              >
+                Kill All
+              </button>
+            )}
+            <button
+              className="rounded-md px-2 py-1 text-xs text-zinc-500 hover:text-zinc-300"
+              onClick={() => { setSelectedIds(new Set()); setBulkConfirm(null); }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {/* History tab — resumable sessions */}
+        {filter === "history" ? (
+          resumableLoading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-300" />
+              <p className="mt-4 text-sm text-zinc-500">Loading session history...</p>
+            </div>
+          ) : resumableSessions.length === 0 ? (
+            <EmptyState message="No resumable sessions found" />
+          ) : (
+            <div className="space-y-2">
+              {resumableSessions
+                .filter((rs) => {
+                  if (!searchQuery) return true;
+                  const q = searchQuery.toLowerCase();
+                  return (
+                    rs.cwd.toLowerCase().includes(q) ||
+                    rs.session_id.toLowerCase().startsWith(q) ||
+                    (rs.branch?.toLowerCase().includes(q) ?? false) ||
+                    (rs.project_name?.toLowerCase().includes(q) ?? false)
+                  );
+                })
+                .map((rs) => (
+                  <ResumableCard
+                    key={rs.session_id}
+                    session={rs}
+                    onResumed={() => {
+                      setFilter("all");
+                      fetchSessionsRef.current();
+                    }}
+                  />
+                ))}
+            </div>
+          )
+        ) : filter === "by-group" && customGroups ? (
           customGroups.length === 0 ? (
             <EmptyState message="No sessions in any group" />
           ) : (
@@ -582,6 +886,9 @@ export default function DashboardPage() {
                         isMinimized={minimizedIds.has(session.session_id)}
                         onTogglePin={togglePin}
                         onToggleMinimize={toggleMinimize}
+                        selectMode={selectMode}
+                        isSelected={selectedIds.has(session.session_id)}
+                        onToggleSelect={toggleSelect}
                       />
                     ))}
                   </div>
@@ -625,6 +932,9 @@ export default function DashboardPage() {
                 isMinimized={minimizedIds.has(session.session_id)}
                 onTogglePin={togglePin}
                 onToggleMinimize={toggleMinimize}
+                selectMode={selectMode}
+                isSelected={selectedIds.has(session.session_id)}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
@@ -633,7 +943,7 @@ export default function DashboardPage() {
 
       {/* Auto-refresh indicator */}
       {lastUpdatedText && (
-        <div className="fixed bottom-[68px] right-4 z-40 flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-500 backdrop-blur-sm border border-zinc-800/50">
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-1.5 rounded-full bg-zinc-900/80 px-2.5 py-1 text-[11px] text-zinc-500 backdrop-blur-sm border border-zinc-800/50">
           <span className="relative flex h-1.5 w-1.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-40" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -642,11 +952,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Command bar */}
-      <CommandBar
-        voiceEnabled={settings.voiceEnabled}
-        ttsEnabled={settings.ttsEnabled}
-      />
 
       {/* Settings panel */}
       <SettingsPanel
@@ -654,6 +959,8 @@ export default function DashboardPage() {
         onOpenChange={setSettingsOpen}
         settings={settings}
         onSettingsChange={updateSettings}
+        hasGeminiKey={hasGeminiKey}
+        onGeminiKeyChanged={() => fetchSessionsRef.current()}
       />
 
       {/* New session dialog */}
