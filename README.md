@@ -69,3 +69,8 @@ Release workflow:
 - builds standalone frontend
 - publishes npm package
 
+## Support
+
+If Claude Manager saves you time and you want to support development, tips are appreciated.
+
+Venmo: `@josh-hegstad`
