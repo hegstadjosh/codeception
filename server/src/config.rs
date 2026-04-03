@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// Path to config in ~/.claude-manager.
+/// Path to config in ~/.codeception.
 fn config_path() -> PathBuf {
     crate::paths::app_data_file("config.json")
 }

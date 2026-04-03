@@ -1,5 +1,5 @@
 // ============================================================
-// Claude Manager — Core Types (backed by recon serve)
+// Codeception — Core Types (backed by recon serve)
 // ============================================================
 
 /** Status state machine from recon */

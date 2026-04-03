@@ -1,14 +1,14 @@
 {
-  "name": "claude-manager",
+  "name": "codeception",
   "version": "0.5.1",
   "description": "Dashboard for monitoring and managing multiple Claude Code sessions",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hegstadjosh/claude-manager.git"
+    "url": "git+https://github.com/hegstadjosh/codeception.git"
   },
   "bin": {
-    "claude-manager": "bin/claude-manager.js"
+    "codeception": "bin/codeception.js"
   },
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
@@ -16,11 +16,11 @@
     "dev:ui": "next dev",
     "build": "next build",
     "prepack": "next build",
-    "start": "node bin/claude-manager.js",
+    "start": "node bin/codeception.js",
     "lint": "eslint"
   },
   "files": [
-    "bin/claude-manager.js",
+    "bin/codeception.js",
     "scripts/postinstall.js",
     ".next/standalone/",
     ".next/static/",

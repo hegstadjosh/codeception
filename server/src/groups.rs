@@ -11,7 +11,7 @@ pub struct Group {
     pub sort_order: i32,
 }
 
-/// Path to groups persistence in ~/.claude-manager.
+/// Path to groups persistence in ~/.codeception.
 fn groups_path() -> Option<PathBuf> {
     Some(crate::paths::app_data_file("recon-groups.json"))
 }

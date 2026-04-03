@@ -1,4 +1,4 @@
-# Claude Manager
+# Codeception
 
 If you like it, pay me :) Venmo: `@josh-hegstad`
 
@@ -7,7 +7,7 @@ Local dashboard for monitoring and managing multiple Claude Code sessions from o
 ## Quick start
 
 ```bash
-npx claude-manager
+npx codeception
 ```
 
 Opens `http://localhost:3456` and starts:
@@ -25,17 +25,17 @@ Opens `http://localhost:3456` and starts:
 ## CLI options
 
 ```bash
-claude-manager --port 8080
-claude-manager --no-open
-claude-manager --no-manager
-claude-manager stop
+codeception --port 8080
+codeception --no-open
+codeception --no-manager
+codeception stop
 ```
 
 ## How packaging works
 
 - npm package ships built Next.js standalone output.
 - `postinstall` downloads a prebuilt `recon` binary matching your platform.
-- Runtime state is stored in `~/.claude-manager/`:
+- Runtime state is stored in `~/.codeception/`:
   - `config.json`
   - `recon-summaries.json`
   - `recon-groups.json`

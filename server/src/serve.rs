@@ -62,7 +62,7 @@ pub async fn run_server(
     manager_dir: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ref dir) = manager_dir {
-        std::env::set_var("CLAUDE_MANAGER_MANAGER_DIR", dir);
+        std::env::set_var("CODECEPTION_MANAGER_DIR", dir);
     }
 
     // Load cached summaries from disk so they survive restarts

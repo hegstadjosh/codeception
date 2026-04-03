@@ -79,8 +79,8 @@ export function useNotifications(sessions: Session[], settings: DashboardSetting
       const inputCount = sessions.filter((s) => s.status === "input").length;
       document.title =
         inputCount > 0
-          ? `(${inputCount} needs input) Claude Manager`
-          : "Claude Manager";
+          ? `(${inputCount} needs input) Codeception`
+          : "Codeception";
     }
   }, [sessions, settings.notificationBrowser, settings.notificationSound]);
 }

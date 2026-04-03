@@ -35,8 +35,8 @@ function isRealSession(s: Session): boolean {
   return false;
 }
 
-const PINNED_STORAGE_KEY = "claude-manager-pinned";
-const MINIMIZED_STORAGE_KEY = "claude-manager-minimized";
+const PINNED_STORAGE_KEY = "codeception-pinned";
+const MINIMIZED_STORAGE_KEY = "codeception-minimized";
 
 function loadPinnedIds(): Set<string> {
   try {
@@ -491,7 +491,7 @@ export default function DashboardPage() {
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-                Claude Manager
+                Codeception
               </h1>
             </div>
           </div>
@@ -514,7 +514,7 @@ export default function DashboardPage() {
           <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
             <div className="flex items-center gap-3">
               <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-                Claude Manager
+                Codeception
               </h1>
             </div>
           </div>
@@ -602,7 +602,7 @@ export default function DashboardPage() {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <h1 className="text-base font-semibold tracking-tight text-zinc-100">
-              Claude Manager
+              Codeception
             </h1>
             <span className="rounded-full bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
               {liveCount} live

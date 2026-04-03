@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Claude Manager",
+  title: "Codeception",
   description: "Local dashboard for monitoring Claude Code sessions",
 };
 

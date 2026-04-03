@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import type { DashboardSettings } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
 
-const STORAGE_KEY = "claude-manager-settings";
+const STORAGE_KEY = "codeception-settings";
 
 export function useSettings(): [
   DashboardSettings,

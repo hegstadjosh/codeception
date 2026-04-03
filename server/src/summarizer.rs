@@ -38,7 +38,7 @@ pub fn count_user_assistant_messages(messages: &[ConversationMessage]) -> usize 
     }).count()
 }
 
-/// Path to summary cache in ~/.claude-manager.
+/// Path to summary cache in ~/.codeception.
 fn cache_path() -> Option<PathBuf> {
     Some(crate::paths::app_data_file("recon-summaries.json"))
 }

@@ -9,10 +9,10 @@ const { spawnSync } = require("child_process");
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
 const BIN_DIR = path.join(PACKAGE_ROOT, "bin");
 const RECON_BIN = path.join(BIN_DIR, "recon");
-const OWNER_REPO = "hegstadjosh/claude-manager";
+const OWNER_REPO = "hegstadjosh/codeception";
 
 function log(msg) {
-  console.log(`[claude-manager] ${msg}`);
+  console.log(`[codeception] ${msg}`);
 }
 
 function isSourceCheckout() {
@@ -59,8 +59,8 @@ function download(url, dest) {
 }
 
 async function main() {
-  if (process.env.CLAUDE_MANAGER_SKIP_POSTINSTALL === "1") {
-    log("Skipping binary download (CLAUDE_MANAGER_SKIP_POSTINSTALL=1).");
+  if (process.env.CODECEPTION_SKIP_POSTINSTALL === "1") {
+    log("Skipping binary download (CODECEPTION_SKIP_POSTINSTALL=1).");
     return;
   }
 

@@ -6,7 +6,7 @@ const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
 const PACKAGE_ROOT = path.resolve(__dirname, "..");
-const DATA_DIR = path.join(os.homedir(), ".claude-manager");
+const DATA_DIR = path.join(os.homedir(), ".codeception");
 const PID_FILE = path.join(DATA_DIR, "launcher-pids.json");
 const RECON_LOG = path.join(DATA_DIR, "recon.log");
 const NEXT_LOG = path.join(DATA_DIR, "next.log");
@@ -176,7 +176,7 @@ function stop() {
   killPort(RECON_PORT);
   killPort(3456);
   removePidFile();
-  console.log("Stopped claude-manager services.");
+  console.log("Stopped codeception services.");
 }
 
 function start() {
@@ -224,7 +224,7 @@ function start() {
     openBrowser(url);
   }
 
-  console.log(`Claude Manager running at ${url}`);
+  console.log(`Codeception running at ${url}`);
   if (managerName) {
     console.log(`Manager session: ${managerName}`);
   }
@@ -247,4 +247,3 @@ if (command === "stop") {
 } else {
   start();
 }
-

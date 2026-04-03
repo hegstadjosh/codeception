@@ -62,7 +62,7 @@ jobs:
 
       - name: Build standalone app
         env:
-          CLAUDE_MANAGER_SKIP_POSTINSTALL: "1"
+          CODECEPTION_SKIP_POSTINSTALL: "1"
         run: pnpm build
 
       - name: Publish npm package

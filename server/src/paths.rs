@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-const APP_DIR_NAME: &str = ".claude-manager";
-const MANAGER_DIR_ENV: &str = "CLAUDE_MANAGER_MANAGER_DIR";
+const APP_DIR_NAME: &str = ".codeception";
+const MANAGER_DIR_ENV: &str = "CODECEPTION_MANAGER_DIR";
 
 /// Runtime data directory for all persisted app state.
 pub fn app_data_dir() -> PathBuf {
@@ -11,7 +11,7 @@ pub fn app_data_dir() -> PathBuf {
     dir
 }
 
-/// Path helper for a file under ~/.claude-manager.
+/// Path helper for a file under ~/.codeception.
 pub fn app_data_file(filename: &str) -> PathBuf {
     app_data_dir().join(filename)
 }
