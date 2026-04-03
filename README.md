@@ -1,5 +1,7 @@
 # Claude Manager
 
+If you like it, pay me :) Venmo: `@josh-hegstad`
+
 Local dashboard for monitoring and managing multiple Claude Code sessions from one browser tab.
 
 ## Quick start
@@ -68,9 +70,3 @@ Release workflow:
 - uploads binary tarballs to GitHub Release
 - builds standalone frontend
 - publishes npm package
-
-## Support
-
-If you like it, pay me :)
-
-Venmo: `@josh-hegstad`
