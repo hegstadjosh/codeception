@@ -372,6 +372,10 @@ export function SessionCard({ session, isPinned = false, isMinimized = false, on
                 "truncate text-sm font-semibold",
                 isManager ? "text-violet-300" : "text-zinc-100 hover:text-violet-300 cursor-pointer"
               )}
+              onClick={(e) => {
+                // Stop click from bubbling to CardHeader so it doesn't toggle expand
+                if (!isManager) e.stopPropagation();
+              }}
               onDoubleClick={(e) => {
                 if (!isManager) {
                   e.stopPropagation();

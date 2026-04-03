@@ -56,7 +56,6 @@ export function NewSessionDialog({ open, onOpenChange, onCreated }: NewSessionDi
         body: JSON.stringify({
           cwd: cwd.trim(),
           name: name.trim() || undefined,
-          prompt: initialPrompt.trim() || undefined,
           flags,
         }),
       });
@@ -65,6 +64,9 @@ export function NewSessionDialog({ open, onOpenChange, onCreated }: NewSessionDi
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? `HTTP ${res.status}`);
       }
+
+      const result = await res.json().catch(() => ({}));
+      const promptText = initialPrompt.trim();
 
       // Success — close, reset, and trigger immediate refresh
       onOpenChange(false);
@@ -75,6 +77,21 @@ export function NewSessionDialog({ open, onOpenChange, onCreated }: NewSessionDi
       setExtraFlags("");
       setError(null);
       onCreated?.();
+
+      // If an initial prompt was provided, send it after a delay to let Claude boot
+      if (promptText && result.session_id) {
+        setTimeout(async () => {
+          try {
+            await fetch(`/api/sessions/${result.session_id}/reply`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: promptText }),
+            });
+          } catch {
+            // Best-effort — session may not be ready yet
+          }
+        }, 3000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create session");
     } finally {
