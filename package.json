@@ -1,6 +1,6 @@
 {
   "name": "codeception",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Dashboard for monitoring and managing multiple Claude Code sessions",
   "license": "MIT",
   "repository": {
