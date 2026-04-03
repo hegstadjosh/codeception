@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import type { DashboardSettings } from "@/lib/types";
 import {
   Sheet,
@@ -11,6 +12,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -24,6 +27,8 @@ interface SettingsPanelProps {
   onOpenChange: (open: boolean) => void;
   settings: DashboardSettings;
   onSettingsChange: (update: Partial<DashboardSettings>) => void;
+  hasGeminiKey: boolean;
+  onGeminiKeyChanged: () => void;
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -62,7 +67,35 @@ export function SettingsPanel({
   onOpenChange,
   settings,
   onSettingsChange,
+  hasGeminiKey,
+  onGeminiKeyChanged,
 }: SettingsPanelProps) {
+  const [apiKey, setApiKey] = useState("");
+  const [keySaving, setKeySaving] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+
+  const handleSaveKey = useCallback(async () => {
+    if (!apiKey.trim()) return;
+    setKeySaving(true);
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gemini_api_key: apiKey.trim() }),
+      });
+      if (res.ok) {
+        setKeySaved(true);
+        setApiKey("");
+        onGeminiKeyChanged();
+        setTimeout(() => setKeySaved(false), 3000);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setKeySaving(false);
+    }
+  }, [apiKey, onGeminiKeyChanged]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="overflow-y-auto bg-zinc-950 border-zinc-800">
@@ -147,6 +180,54 @@ export function SettingsPanel({
                 }
               />
             </SettingRow>
+          </section>
+
+          <Separator className="bg-zinc-800" />
+
+          {/* API Keys */}
+          <section className="flex flex-col gap-3">
+            <SectionHeading>API Keys</SectionHeading>
+
+            <div className="flex flex-col gap-2">
+              <Label className="text-sm text-zinc-300 font-normal">
+                Gemini API Key
+                {hasGeminiKey && (
+                  <span className="ml-2 text-[11px] text-emerald-400">configured</span>
+                )}
+              </Label>
+              <p className="text-[11px] text-zinc-500 leading-snug">
+                Used for session summarization (Gemini Flash Lite). Get one at{" "}
+                <a
+                  href="https://aistudio.google.com/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-violet-400 hover:text-violet-300 underline"
+                >
+                  aistudio.google.com
+                </a>
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={hasGeminiKey ? "••••••••  (replace)" : "AI..."}
+                  className="h-8 bg-zinc-900 border-zinc-700 text-zinc-200 text-xs font-mono"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveKey();
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs shrink-0"
+                  disabled={!apiKey.trim() || keySaving}
+                  onClick={handleSaveKey}
+                >
+                  {keySaving ? "Saving..." : keySaved ? "Saved" : "Save"}
+                </Button>
+              </div>
+            </div>
           </section>
 
           <Separator className="bg-zinc-800" />
