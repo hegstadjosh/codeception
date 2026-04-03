@@ -4,7 +4,39 @@ If you like it, pay me :) Venmo: `@josh-hegstad`
 
 Local dashboard for monitoring and managing multiple Claude Code sessions from one browser tab.
 
-## Quick start
+## Status
+
+`npx codeception` is currently broken. Use the source checkout flow below for now.
+
+## Run from source
+
+### macOS prerequisites
+
+```bash
+brew install tmux
+brew install pnpm
+```
+
+Also install:
+- Node.js 20+
+- Claude Code CLI
+
+### start
+
+```bash
+git clone https://github.com/hegstadjosh/codeception.git
+cd codeception
+pnpm install
+bash scripts/dev.sh
+```
+
+Opens the app at `http://localhost:3456`.
+
+## npm / npx status
+
+The npm package exists, but the `npx` path is not reliable right now.
+
+## Old quick start
 
 ```bash
 npx codeception
@@ -18,6 +50,7 @@ Opens `http://localhost:3456` and starts:
 ## Requirements
 
 - Node.js 20+
+- `pnpm` (for source checkout)
 - `tmux`
 - Claude Code CLI (`npm i -g @anthropic-ai/claude-code`)
 - macOS or Linux
